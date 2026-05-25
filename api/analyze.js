@@ -20,24 +20,18 @@ export default async function handler(req, res) {
     try { body = JSON.parse(body) } catch { return res.status(400).json({ error: 'Invalid JSON' }) }
   }
 
-  let { imageData, mediaType } = body;
+  const { imageData, mediaType, hints } = body;
   if (!imageData) return res.status(400).json({ error: 'No image data provided' });
 
-  imageData = imageData.replace(/ /g, '+');
-
+  const cleanImageData = imageData.replace(/ /g, '+');
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   const safeMediaType = validTypes.includes(mediaType) ? mediaType : 'image/jpeg';
 
-  // If image is over 900KB, reduce quality by trimming — just take every other pixel row
-  // by re-encoding at lower quality via buffer manipulation isn't possible server-side without sharp
-  // Instead we truncate large images and warn — better: just use a lower quality jpeg on client
-  const sizeKB = Math.round(imageData.length / 1024);
-  console.log(`Image size: ${sizeKB}KB, type: ${safeMediaType}`);
+  const hintsSection = hints
+    ? `\n\nIMPORTANT - The collector has provided this additional context which you MUST use and prioritize:\n${hints}\n`
+    : '';
 
-  // Convert base64 to buffer and check actual size
-  const imageBuffer = Buffer.from(imageData, 'base64');
-  const imageSizeKB = Math.round(imageBuffer.length / 1024);
-  console.log(`Decoded image: ${imageSizeKB}KB`);
+  console.log(`Image size: ${Math.round(cleanImageData.length / 1024)}KB, type: ${safeMediaType}, hints: ${hints || 'none'}`);
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -55,18 +49,18 @@ export default async function handler(req, res) {
           content: [
             {
               type: 'image',
-              source: { type: 'base64', media_type: safeMediaType, data: imageData }
+              source: { type: 'base64', media_type: safeMediaType, data: cleanImageData }
             },
             {
               type: 'text',
-              text: `You are a sports memorabilia expert with deep knowledge of baseball cards, bobbleheads, autographs, prints, jerseys, and all collectibles. Analyze this image carefully.
+              text: `You are a sports memorabilia expert with deep knowledge of baseball cards, bobbleheads, autographs, prints, jerseys, and all collectibles. Analyze this image carefully.${hintsSection}
 
 Respond ONLY with a valid JSON object, no markdown, no preamble, no explanation. Use these exact keys:
 {
   "name": "descriptive item name including player and type",
   "year": "year as 4-digit string, or empty string if unknown",
   "category": "one of exactly: Baseball Card, Bobblehead, Print, Autograph Baseball, Jersey, Bat, Helmet, Photo, Poster, Figurine, Other",
-  "player": "full player name or empty string",
+  "player": "full player name or empty string — if the collector told you who signed it, use that name",
   "team": "full team name or empty string",
   "manufacturer": "brand or manufacturer name or empty string",
   "condition": "one of exactly: Mint, Near Mint, Excellent, Very Good, Good, Fair, Poor",
@@ -74,7 +68,7 @@ Respond ONLY with a valid JSON object, no markdown, no preamble, no explanation.
   "gradeScore": "numeric grade as string if visible on label, or empty string",
   "marketValue": current estimated market value as a number with no dollar sign,
   "serialNumber": "serial number or cert number if visible, or empty string",
-  "notes": "relevant details: pose, uniform style, edition, any text visible on item, authentication details, anything notable"
+  "notes": "relevant details including any context provided by the collector, pose, uniform style, edition, any text visible on item, authentication details, anything notable"
 }`
             }
           ]
