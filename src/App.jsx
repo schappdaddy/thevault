@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from './supabase'
 
-// ── Constants ────────────────────────────────────────────────────────────────
 const CATEGORIES = ['Baseball Card','Bobblehead','Print','Autograph Baseball','Jersey','Bat','Helmet','Photo','Poster','Figurine','Other']
 const CONDITIONS = ['Mint','Near Mint','Excellent','Very Good','Good','Fair','Poor']
 const GRADERS    = ['','PSA','BGS','SGC','JSA','BAS','Other']
@@ -130,11 +129,21 @@ export default function App() {
       setAiLoading(true)
       setAiError('')
       try {
-        const base64 = dataUrl.split(',')[1]
+        // Resize image to max 1024px and convert to jpeg to ensure compatibility
+        const bitmap = await createImageBitmap(file)
+        const canvas = document.createElement('canvas')
+        const MAX = 1024
+        const scale = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1)
+        canvas.width = Math.round(bitmap.width * scale)
+        canvas.height = Math.round(bitmap.height * scale)
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        const base64 = resizedDataUrl.split(',')[1]
+
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: base64, mediaType: file.type || 'image/jpeg' })
+          body: JSON.stringify({ imageData: base64, mediaType: 'image/jpeg' })
         })
         if (!res.ok) {
           const err = await res.json()
@@ -288,10 +297,10 @@ export default function App() {
 
         {/* Stats */}
         <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap' }}>
-          <StatCard label="Items"             value={items.length} />
-          <StatCard label="Collection Value"  value={fmt(totalValue)}            accent="#D4AF37" />
-          <StatCard label="Invested"          value={fmt(totalCost)}             accent="#4ECDC4" />
-          <StatCard label="Gain"              value={fmt(totalValue - totalCost)} accent={totalValue-totalCost>=0?'#96CEB4':'#FF6B6B'} />
+          <StatCard label="Items"            value={items.length} />
+          <StatCard label="Collection Value" value={fmt(totalValue)}             accent="#D4AF37" />
+          <StatCard label="Invested"         value={fmt(totalCost)}              accent="#4ECDC4" />
+          <StatCard label="Gain"             value={fmt(totalValue - totalCost)} accent={totalValue-totalCost>=0?'#96CEB4':'#FF6B6B'} />
         </div>
 
         {loading && <Spinner label="Loading your vault…" />}
