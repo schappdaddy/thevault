@@ -129,21 +129,15 @@ export default function App() {
       setAiLoading(true)
       setAiError('')
       try {
-        // Resize image to max 1024px and convert to jpeg to ensure compatibility
-        const bitmap = await createImageBitmap(file)
-        const canvas = document.createElement('canvas')
-        const MAX = 1024
-        const scale = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1)
-        canvas.width = Math.round(bitmap.width * scale)
-        canvas.height = Math.round(bitmap.height * scale)
-        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-        const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.85)
-        const base64 = resizedDataUrl.split(',')[1]
+        const base64 = dataUrl.split(',')[1]
+        const mediaType = file.type || 'image/jpeg'
+        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+        const safeType = validTypes.includes(mediaType) ? mediaType : 'image/jpeg'
 
         const res = await fetch('/api/analyze', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: base64, mediaType: 'image/jpeg' })
+          body: JSON.stringify({ imageData: base64, mediaType: safeType })
         })
         if (!res.ok) {
           const err = await res.json()
