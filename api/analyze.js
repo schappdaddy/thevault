@@ -15,11 +15,24 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { imageData, mediaType } = req.body;
+  let body = req.body;
+
+  // If body is a string (raw), parse it
+  if (typeof body === 'string') {
+    try { body = JSON.parse(body) } catch { return res.status(400).json({ error: 'Invalid JSON' }) }
+  }
+
+  const { imageData, mediaType } = body;
   if (!imageData) return res.status(400).json({ error: 'No image data provided' });
+
+  // Fix any spaces that crept in from URL decoding of + signs
+  const cleanImageData = imageData.replace(/ /g, '+');
 
   const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
   const safeMediaType = validTypes.includes(mediaType) ? mediaType : 'image/jpeg';
+
+  // Log size for debugging
+  console.log(`Image size: ${Math.round(cleanImageData.length / 1024)}KB, type: ${safeMediaType}`);
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -37,7 +50,7 @@ export default async function handler(req, res) {
           content: [
             {
               type: 'image',
-              source: { type: 'base64', media_type: safeMediaType, data: imageData }
+              source: { type: 'base64', media_type: safeMediaType, data: cleanImageData }
             },
             {
               type: 'text',
