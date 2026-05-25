@@ -120,47 +120,66 @@ export default function App() {
     })
 
   const handleImageUpload = useCallback(async (file) => {
-    if (!file) return
-    setImageFile(file)
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const dataUrl = e.target.result
-      setImagePreview(dataUrl)
-      setAiLoading(true)
-      setAiError('')
-      try {
-        const base64 = dataUrl.split(',')[1]
-        const mediaType = file.type || 'image/jpeg'
-        const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-        const safeType = validTypes.includes(mediaType) ? mediaType : 'image/jpeg'
+  if (!file) return
+  setImageFile(file)
+  setAiLoading(true)
+  setAiError('')
 
-        const res = await fetch('/api/analyze', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageData: base64, mediaType: safeType })
-        })
-        if (!res.ok) {
-          const err = await res.json()
-          throw new Error(err.error || `Server error ${res.status}`)
-        }
-        const parsed = await res.json()
-        setForm(prev => ({
-          ...prev, ...parsed,
-          market_value:    parsed.marketValue    ?? parsed.market_value    ?? '',
-          grading_service: parsed.gradingService ?? parsed.grading_service ?? '',
-          grade_score:     parsed.gradeScore     ?? parsed.grade_score     ?? '',
-          serial_number:   parsed.serialNumber   ?? parsed.serial_number   ?? '',
-          purchase_price:  prev.purchase_price,
-          purchase_date:   prev.purchase_date,
-        }))
-      } catch (err) {
-        setAiError(`Analysis failed: ${err.message}`)
-      }
-      setAiLoading(false)
+  try {
+    // Draw file into canvas to force convert any format (including HEIC) to JPEG
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = e => resolve(e.target.result)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+    setImagePreview(dataUrl)
+
+    // Force convert to JPEG via canvas regardless of source format
+    const img = new Image()
+    img.src = dataUrl
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = reject
+      setTimeout(reject, 10000) // 10s timeout
+    })
+
+    const canvas = document.createElement('canvas')
+    const MAX = 1200
+    const scale = Math.min(MAX / img.width, MAX / img.height, 1)
+    canvas.width = Math.round(img.width * scale)
+    canvas.height = Math.round(img.height * scale)
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+
+    const compressed = canvas.toDataURL('image/jpeg', 0.85)
+    const base64 = compressed.split(',')[1]
+    console.log(`Sending ${Math.round(base64.length / 1024)}KB as image/jpeg`)
+
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ imageData: base64, mediaType: 'image/jpeg' })
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.error || `Server error ${res.status}`)
     }
-    reader.readAsDataURL(file)
-  }, [])
-
+    const parsed = await res.json()
+    setForm(prev => ({
+      ...prev, ...parsed,
+      market_value:    parsed.marketValue    ?? parsed.market_value    ?? '',
+      grading_service: parsed.gradingService ?? parsed.grading_service ?? '',
+      grade_score:     parsed.gradeScore     ?? parsed.grade_score     ?? '',
+      serial_number:   parsed.serialNumber   ?? parsed.serial_number   ?? '',
+      purchase_price:  prev.purchase_price,
+      purchase_date:   prev.purchase_date,
+    }))
+  } catch (err) {
+    setAiError(`Analysis failed: ${err.message}`)
+  }
+  setAiLoading(false)
+}, [])
   const handleDrop = useCallback((e) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
