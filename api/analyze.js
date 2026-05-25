@@ -1,7 +1,6 @@
 export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -11,6 +10,9 @@ export default async function handler(req, res) {
 
   const { imageData, mediaType } = req.body;
   if (!imageData) return res.status(400).json({ error: 'No image data provided' });
+
+  const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const safeMediaType = validTypes.includes(mediaType) ? mediaType : 'image/jpeg';
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -28,7 +30,7 @@ export default async function handler(req, res) {
           content: [
             {
               type: 'image',
-              source: { type: 'base64', media_type: mediaType || 'image/jpeg', data: imageData }
+              source: { type: 'base64', media_type: safeMediaType, data: imageData }
             },
             {
               type: 'text',
