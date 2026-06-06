@@ -232,13 +232,13 @@ function Vault() {
   }
 
   // Delete image from R2 via serverless function
-  async function deleteFromR2(key) {
-    if (!key) return
+  async function deleteFromR2(key, url) {
+    if (!key && !url) return
     try {
       await fetch('/api/upload-image', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key })
+        body: JSON.stringify({ key, url })
       })
     } catch (err) {
       console.error('R2 delete error:', err)
@@ -349,7 +349,9 @@ function Vault() {
   async function handleDelete(id) {
     if (!confirm('Remove this item from The Vault?')) return
     const item = items.find(i=>i.id===id) || selectedFull
-    if (item?.image_path) await deleteFromR2(item.image_path)
+    if (item?.image_path || item?.image_url) {
+      await deleteFromR2(item.image_path, item.image_url)
+    }
     await supabase.from('items').delete().eq('id',id)
     await refetchAll()
     await fetchTotals()
