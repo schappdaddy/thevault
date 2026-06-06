@@ -25,11 +25,10 @@ export default async function handler(req, res) {
     // Build search query
     const queryParts = [player, year, name?.split(' ').slice(0,4).join(' ')].filter(Boolean)
     const searchQuery = queryParts.join(' ')
-
     const callbackUrl = `https://thevault-iota.vercel.app/api/refresh-callback`
 
-    // Fire Apify run — don't wait for it
-    const apifyRes = await fetch(
+    // Step 1 — Start the Apify run (no webhook in body)
+    const runRes = await fetch(
       `https://api.apify.com/v2/acts/marielise.dev~ebay-sold-listings-intelligence/runs?token=${process.env.APIFY_API_TOKEN}`,
       {
         method: 'POST',
@@ -43,36 +42,55 @@ export default async function handler(req, res) {
           outputFormat: 'full',
           includeAnalytics: true,
           proxy: { useApifyProxy: true },
-          webhooks: [{
-            eventTypes: ['ACTOR.RUN.SUCCEEDED'],
-            requestUrl: callbackUrl,
-            payloadTemplate: JSON.stringify({
-              itemId: id,
-              itemName: name,
-              player, year, category, manufacturer, condition,
-              grading_service, grade_score,
-              runId: '{{runId}}',
-              datasetId: '{{defaultDatasetId}}'
-            })
-          }]
         })
       }
     )
 
-    if (!apifyRes.ok) {
-      const err = await apifyRes.text()
+    if (!runRes.ok) {
+      const err = await runRes.text()
       console.error('Apify start error:', err)
       await supabase.from('items').update({ price_refreshing: false }).eq('id', id)
       return res.status(500).json({ error: 'Failed to start price refresh' })
     }
 
-    const apifyRun = await apifyRes.json()
-    console.log(`Apify run started: ${apifyRun.data?.id} for item: ${name}`)
+    const runData = await runRes.json()
+    const runId = runData.data?.id
+
+    console.log(`Apify run started: ${runId} for item: ${name}`)
+
+    // Step 2 — Register webhook for this specific run
+    const itemData = { itemId:id, itemName:name, player:player||'', year:year||'', category:category||'', condition:condition||'', grading_service:grading_service||'', grade_score:grade_score||'' }
+
+    const webhookRes = await fetch(
+      `https://api.apify.com/v2/webhooks?token=${process.env.APIFY_API_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
+          condition: { actorRunId: runId },
+          requestUrl: callbackUrl,
+          payloadTemplate: JSON.stringify({
+            ...itemData,
+            runId: '{{runId}}',
+            datasetId: '{{defaultDatasetId}}'
+          })
+        })
+      }
+    )
+
+    if (!webhookRes.ok) {
+      const err = await webhookRes.text()
+      console.error('Webhook registration error:', err)
+    } else {
+      const webhookData = await webhookRes.json()
+      console.log(`Webhook registered: ${webhookData.data?.id}`)
+    }
 
     return res.status(200).json({
       success: true,
-      message: 'Price refresh started — will update automatically when complete',
-      runId: apifyRun.data?.id
+      message: 'Price refresh started',
+      runId
     })
 
   } catch (err) {
