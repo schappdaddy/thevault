@@ -10,7 +10,8 @@ const EMPTY = {
   name:'', year:'', category:'Baseball Card', player:'', team:'',
   manufacturer:'', condition:'Near Mint', grading_service:'', grade_score:'',
   market_value:'', purchase_price:'', purchase_date:'', serial_number:'',
-  notes:'', quantity:1
+  notes:'', quantity:1, dataSource:null, salesCount:0, priceRange:null,
+  marketVelocity:null, demandLevel:null, quickTake:null
 }
 
 const CAT_EMOJI = {
@@ -209,7 +210,6 @@ function Vault() {
     }
   }
 
-  // Upload image to R2 via serverless function
   async function uploadToR2(base64, filename = 'image.jpg') {
     setUploadStatus('uploading')
     try {
@@ -231,7 +231,6 @@ function Vault() {
     }
   }
 
-  // Delete image from R2 via serverless function
   async function deleteFromR2(key, url) {
     if (!key && !url) return
     try {
@@ -276,7 +275,6 @@ function Vault() {
 
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
 
-      // Run AI analysis and R2 upload in parallel
       const [aiResult] = await Promise.all([
         fetch('/api/analyze', {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -296,6 +294,12 @@ function Vault() {
         purchase_price:  prev.purchase_price,
         purchase_date:   prev.purchase_date,
         quantity:        prev.quantity || 1,
+        dataSource:      aiResult.dataSource || 'AI estimate',
+        salesCount:      aiResult.salesCount || 0,
+        priceRange:      aiResult.priceRange || null,
+        marketVelocity:  aiResult.marketVelocity || null,
+        demandLevel:     aiResult.demandLevel || null,
+        quickTake:       aiResult.quickTake || null,
       }))
     } catch(err) { setAiError(`Analysis failed: ${err.message}`) }
     setAiLoading(false)
@@ -309,7 +313,7 @@ function Vault() {
 
   async function cleanupUploadedImage() {
     if (uploadedKey) {
-      await deleteFromR2(uploadedKey)
+      await deleteFromR2(uploadedKey, uploadedUrl)
       setUploadedKey(null)
       setUploadedUrl(null)
       setUploadStatus('idle')
@@ -322,7 +326,6 @@ function Vault() {
     try {
       const image_url  = uploadedUrl  || form.image_url  || null
       const image_path = uploadedKey  || form.image_path || null
-
       const payload = {
         name:form.name, year:form.year||null, category:form.category||null,
         player:form.player||null, team:form.team||null, manufacturer:form.manufacturer||null,
@@ -334,10 +337,8 @@ function Vault() {
         notes:form.notes||null, image_url, image_path,
         quantity: Number(form.quantity) || 1,
       }
-
       if (editingId) { await supabase.from('items').update(payload).eq('id',editingId) }
       else { await supabase.from('items').insert(payload) }
-
       await refetchAll()
       await fetchTotals()
       resetForm()
@@ -349,9 +350,7 @@ function Vault() {
   async function handleDelete(id) {
     if (!confirm('Remove this item from The Vault?')) return
     const item = items.find(i=>i.id===id) || selectedFull
-    if (item?.image_path || item?.image_url) {
-      await deleteFromR2(item.image_path, item.image_url)
-    }
+    if (item?.image_path || item?.image_url) await deleteFromR2(item.image_path, item.image_url)
     await supabase.from('items').delete().eq('id',id)
     await refetchAll()
     await fetchTotals()
@@ -474,9 +473,7 @@ function Vault() {
                 <option value="year">Year</option>
                 <option value="name">Name</option>
               </select>
-              <div style={{ marginLeft:'auto', fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>
-                {items.length} of {totalCount} items
-              </div>
+              <div style={{ marginLeft:'auto', fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>{items.length} of {totalCount} items</div>
             </div>
             <div style={{ display:'flex', gap:6, marginBottom:20, flexWrap:'wrap' }}>
               {['All',...CATEGORIES].map(c=>(
@@ -647,11 +644,20 @@ function Vault() {
                   {refreshResult&&refreshResult.itemId===detailItem.id&&(
                     <div style={{ marginBottom:16, background:'rgba(78,205,196,0.05)', border:'1px solid rgba(78,205,196,0.2)', borderRadius:12, padding:'16px' }}>
                       <div style={{ fontSize:11, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:10 }}>📈 Market Refresh</div>
-                      <div style={{ display:'flex', gap:20, marginBottom:10 }}>
+                      <div style={{ display:'flex', gap:20, marginBottom:10, flexWrap:'wrap' }}>
                         <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Previous</div><div style={{ fontSize:18, color:'#7A8B9A', fontFamily:"'Playfair Display',serif" }}>{fmt(refreshResult.oldValue)}</div></div>
                         <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Updated</div><div style={{ fontSize:22, fontWeight:700, color:'#4ECDC4', fontFamily:"'Playfair Display',serif" }}>{fmt(refreshResult.marketValue)}</div></div>
                         <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Confidence</div><Badge text={refreshResult.confidence} color={refreshResult.confidence==='high'?'#96CEB4':refreshResult.confidence==='medium'?'#D4AF37':'#FF6B6B'} /></div>
+                        {refreshResult.salesCount > 0 && <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Sales Analyzed</div><div style={{ fontSize:14, color:'#F0E6C8' }}>{refreshResult.salesCount}</div></div>}
                       </div>
+                      {refreshResult.priceRange && (
+                        <div style={{ display:'flex', gap:12, marginBottom:10, flexWrap:'wrap' }}>
+                          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Range: <span style={{ color:'#F0E6C8' }}>{refreshResult.priceRange}</span></div>
+                          {refreshResult.marketVelocity && <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Velocity: <span style={{ color:'#F0E6C8' }}>{refreshResult.marketVelocity}</span></div>}
+                          {refreshResult.demandLevel && <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Demand: <span style={{ color:'#F0E6C8' }}>{refreshResult.demandLevel}</span></div>}
+                          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Source: <span style={{ color:'#4ECDC4' }}>{refreshResult.dataSource || 'AI estimate'}</span></div>
+                        </div>
+                      )}
                       <p style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6, marginBottom:12 }}>{refreshResult.reasoning}</p>
                       <div style={{ display:'flex', gap:8 }}>
                         <button onClick={applyRefresh} style={{ background:'linear-gradient(135deg,#4ECDC4,#2EA8A0)', color:'#0A0F1C', border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12, fontWeight:700 }}>Apply Update</button>
@@ -701,7 +707,7 @@ function Vault() {
         {view==='add' && (
           <div className="fade-in" style={{ maxWidth:760, margin:'0 auto' }}>
             <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:24, marginBottom:6 }}>{editingId?'Edit Item':'Add to The Vault'}</h2>
-            <p style={{ color:'#7A8B9A', fontSize:14, marginBottom:24 }}>{editingId?'Update the details for this item.':'Drop a photo — AI identifies your item automatically.'}</p>
+            <p style={{ color:'#7A8B9A', fontSize:14, marginBottom:24 }}>{editingId?'Update the details for this item.':'Drop a photo — AI identifies your item and gets real eBay pricing automatically.'}</p>
             {!editingId&&(
               <>
                 <div style={{ marginBottom:16 }}>
@@ -715,13 +721,24 @@ function Vault() {
                     <div style={{ display:'flex', gap:16, alignItems:'flex-start', textAlign:'left' }}>
                       <img src={imagePreview} alt="Preview" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0 }} />
                       <div style={{ flex:1 }}>
-                        {aiLoading?<Spinner label="Analyzing your item…" />:(
+                        {aiLoading?<Spinner label="Analyzing item + fetching eBay prices…" />:(
                           <>
                             {aiError?<div style={{ color:'#FF6B6B', fontSize:13, marginBottom:8 }}>⚠️ {aiError}</div>
                               :<div style={{ color:'#96CEB4', fontSize:13, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ AI analysis complete</div>}
                             {uploadStatus==='uploading'&&<div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⬆️ Uploading image…</div>}
-                            {uploadStatus==='done'&&<div style={{ color:'#96CEB4', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>✓ Image ready</div>}
-                            {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed</div>}
+                            {uploadStatus==='done'&&<div style={{ color:'#96CEB4', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ Image ready</div>}
+                            {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed</div>}
+                            {form.dataSource==='eBay sold listings' && form.salesCount > 0 && (
+                              <div style={{ background:'rgba(78,205,196,0.08)', border:'1px solid rgba(78,205,196,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
+                                <div style={{ color:'#4ECDC4', fontSize:11, fontFamily:"'Space Mono',monospace", marginBottom:4 }}>📊 Based on {form.salesCount} recent eBay sales</div>
+                                {form.priceRange && <div style={{ color:'#7A8B9A', fontSize:11 }}>Range: {form.priceRange}</div>}
+                                {form.marketVelocity && <div style={{ color:'#7A8B9A', fontSize:11 }}>Velocity: {form.marketVelocity} · Demand: {form.demandLevel}</div>}
+                                {form.quickTake && <div style={{ color:'#C0AE8A', fontSize:11, marginTop:4, lineHeight:1.4 }}>{form.quickTake}</div>}
+                              </div>
+                            )}
+                            {form.dataSource==='AI estimate' && !aiError && (
+                              <div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⚠️ AI estimate — no eBay data found</div>
+                            )}
                             <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:10 }}>Review and adjust fields below</div>
                             <button onClick={e=>{e.stopPropagation();handleClearImage()}} style={{ background:'rgba(255,107,107,0.1)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.2)', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontSize:12 }}>Clear & Re-upload</button>
                           </>
@@ -732,8 +749,8 @@ function Vault() {
                     <>
                       <div style={{ fontSize:36, marginBottom:10 }}>📸</div>
                       <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, marginBottom:4 }}>Drop a photo or tap to choose</div>
-                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>Select from your photo library or take a new photo</div>
-                      <span style={{ background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'5px 14px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>✨ AI-Powered</span>
+                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>AI identifies your item and fetches real eBay pricing</div>
+                      <span style={{ background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'5px 14px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>✨ AI + Real Market Data</span>
                     </>
                   )}
                 </div>
