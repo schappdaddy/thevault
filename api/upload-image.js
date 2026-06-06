@@ -30,12 +30,24 @@ export default async function handler(req, res) {
 
   // DELETE image
   if (req.method === 'DELETE') {
-    const { key } = req.body
-    if (!key) return res.status(400).json({ error: 'No key provided' })
+    const { key, url } = req.body
+
+    // Derive key from URL if key not provided
+    let imageKey = key
+    if (!imageKey && url) {
+      imageKey = url.split('/').pop()
+    }
+
+    console.log(`Deleting R2 key: ${imageKey}`)
+
+    if (!imageKey) return res.status(400).json({ error: 'No key or url provided' })
+
     try {
-      await r2.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
+      await r2.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: imageKey }))
+      console.log(`Successfully deleted: ${imageKey}`)
       return res.status(200).json({ success: true })
     } catch (err) {
+      console.error(`Delete error for key ${imageKey}:`, err)
       return res.status(500).json({ error: err.message })
     }
   }
@@ -56,6 +68,8 @@ export default async function handler(req, res) {
       Body: buffer,
       ContentType: contentType || 'image/jpeg',
     }))
+
+    console.log(`Uploaded to R2: ${key}`)
 
     return res.status(200).json({
       key,
