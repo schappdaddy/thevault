@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from './supabase'
 
 const CATEGORIES = ['Baseball Card','Bobblehead','Print','Autograph Baseball','Jersey','Bat','Helmet','Photo','Poster','Figurine','Other']
@@ -127,7 +127,7 @@ function Vault() {
   const [aiError,       setAiError]       = useState('')
   const [aiHints,       setAiHints]       = useState('')
   const [uploadStatus,  setUploadStatus]  = useState('idle')
-  const [uploadedPath,  setUploadedPath]  = useState(null)
+  const [uploadedKey,   setUploadedKey]   = useState(null)
   const [uploadedUrl,   setUploadedUrl]   = useState(null)
   const [saving,        setSaving]        = useState(false)
   const [filterCat,     setFilterCat]     = useState('All')
@@ -157,31 +157,21 @@ function Vault() {
       else setItems(prev => [...prev, ...cacheRef.current[cacheKey]])
       return
     }
-
     if (pageNum === 0) setLoading(true)
     else setLoadingMore(true)
-
     const from = pageNum * PAGE_SIZE
     const to   = from + PAGE_SIZE - 1
-
     let query = supabase
       .from('items')
       .select('id,name,year,category,player,team,manufacturer,condition,grading_service,grade_score,market_value,purchase_price,image_url,quantity,created_at', { count:'exact' })
-
     if (filterCat !== 'All') query = query.eq('category', filterCat)
-    if (debouncedSearch) {
-      query = query.or(`name.ilike.%${debouncedSearch}%,player.ilike.%${debouncedSearch}%,team.ilike.%${debouncedSearch}%`)
-    }
-
+    if (debouncedSearch) query = query.or(`name.ilike.%${debouncedSearch}%,player.ilike.%${debouncedSearch}%,team.ilike.%${debouncedSearch}%`)
     if (sortBy === 'market_value') query = query.order('market_value', { ascending:false })
     else if (sortBy === 'year')    query = query.order('year', { ascending:false })
     else if (sortBy === 'name')    query = query.order('name', { ascending:true })
     else                           query = query.order('created_at', { ascending:false })
-
     query = query.range(from, to)
-
     const { data, error, count } = await query
-
     if (!error) {
       const newItems = data || []
       cacheRef.current[cacheKey] = newItems
@@ -190,7 +180,6 @@ function Vault() {
       if (count !== null) setTotalCount(count)
       setHasMore(newItems.length === PAGE_SIZE)
     }
-
     if (pageNum === 0) setLoading(false)
     else setLoadingMore(false)
   }
@@ -220,12 +209,48 @@ function Vault() {
     }
   }
 
+  // Upload image to R2 via serverless function
+  async function uploadToR2(base64, filename = 'image.jpg') {
+    setUploadStatus('uploading')
+    try {
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageData: base64, filename, contentType: 'image/jpeg' })
+      })
+      if (!res.ok) throw new Error('Upload failed')
+      const data = await res.json()
+      setUploadedKey(data.key)
+      setUploadedUrl(data.url)
+      setUploadStatus('done')
+      return data
+    } catch (err) {
+      setUploadStatus('error')
+      console.error('R2 upload error:', err)
+      return null
+    }
+  }
+
+  // Delete image from R2 via serverless function
+  async function deleteFromR2(key) {
+    if (!key) return
+    try {
+      await fetch('/api/upload-image', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      })
+    } catch (err) {
+      console.error('R2 delete error:', err)
+    }
+  }
+
   const handleImageUpload = useCallback(async (file) => {
     if (!file) return
     setAiLoading(true)
     setAiError('')
     setUploadStatus('idle')
-    setUploadedPath(null)
+    setUploadedKey(null)
     setUploadedUrl(null)
 
     try {
@@ -240,7 +265,6 @@ function Vault() {
       const img = new Image()
       img.src = dataUrl
       await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
-
       const canvas = document.createElement('canvas')
       const MAX = 1200
       const scale = Math.min(MAX/img.width, MAX/img.height, 1)
@@ -252,32 +276,13 @@ function Vault() {
 
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
 
+      // Run AI analysis and R2 upload in parallel
       const [aiResult] = await Promise.all([
         fetch('/api/analyze', {
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({ imageData:base64, mediaType:'image/jpeg', hints:hintsText })
         }).then(r => r.json()),
-
-        (async () => {
-          setUploadStatus('uploading')
-          try {
-            const blob = await (await fetch(compressed)).blob()
-            const path = `${Date.now()}.jpg`
-            const { error: uploadError } = await supabase.storage
-              .from('vault-images')
-              .upload(path, blob, { contentType:'image/jpeg', upsert:true })
-            if (!uploadError) {
-              const { data: urlData } = supabase.storage.from('vault-images').getPublicUrl(path)
-              setUploadedPath(path)
-              setUploadedUrl(urlData.publicUrl)
-              setUploadStatus('done')
-            } else {
-              setUploadStatus('error')
-            }
-          } catch {
-            setUploadStatus('error')
-          }
-        })()
+        uploadToR2(base64, `${Date.now()}.jpg`)
       ])
 
       if (aiResult.error) throw new Error(aiResult.error)
@@ -303,9 +308,9 @@ function Vault() {
   }, [handleImageUpload])
 
   async function cleanupUploadedImage() {
-    if (uploadedPath) {
-      await supabase.storage.from('vault-images').remove([uploadedPath])
-      setUploadedPath(null)
+    if (uploadedKey) {
+      await deleteFromR2(uploadedKey)
+      setUploadedKey(null)
       setUploadedUrl(null)
       setUploadStatus('idle')
     }
@@ -316,7 +321,7 @@ function Vault() {
     setSaving(true)
     try {
       const image_url  = uploadedUrl  || form.image_url  || null
-      const image_path = uploadedPath || form.image_path || null
+      const image_path = uploadedKey  || form.image_path || null
 
       const payload = {
         name:form.name, year:form.year||null, category:form.category||null,
@@ -344,7 +349,7 @@ function Vault() {
   async function handleDelete(id) {
     if (!confirm('Remove this item from The Vault?')) return
     const item = items.find(i=>i.id===id) || selectedFull
-    if (item?.image_path) await supabase.storage.from('vault-images').remove([item.image_path])
+    if (item?.image_path) await deleteFromR2(item.image_path)
     await supabase.from('items').delete().eq('id',id)
     await refetchAll()
     await fetchTotals()
@@ -374,7 +379,7 @@ function Vault() {
     setAiError('')
     setAiHints('')
     setUploadStatus('idle')
-    setUploadedPath(null)
+    setUploadedKey(null)
     setUploadedUrl(null)
   }
 
@@ -703,7 +708,7 @@ function Vault() {
                 </div>
                 <div onDrop={handleDrop} onDragOver={e=>e.preventDefault()} onClick={()=>fileRef.current?.click()}
                   style={{ border:'2px dashed rgba(212,175,55,0.3)', borderRadius:14, padding:'28px', textAlign:'center', cursor:'pointer', background:imagePreview?'transparent':'rgba(212,175,55,0.03)', marginBottom:24, transition:'all 0.2s' }}>
-                  <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
+                  <input ref={fileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
                   {imagePreview?(
                     <div style={{ display:'flex', gap:16, alignItems:'flex-start', textAlign:'left' }}>
                       <img src={imagePreview} alt="Preview" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0 }} />
@@ -714,7 +719,7 @@ function Vault() {
                               :<div style={{ color:'#96CEB4', fontSize:13, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ AI analysis complete</div>}
                             {uploadStatus==='uploading'&&<div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⬆️ Uploading image…</div>}
                             {uploadStatus==='done'&&<div style={{ color:'#96CEB4', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>✓ Image ready</div>}
-                            {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed — will retry on save</div>}
+                            {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed</div>}
                             <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:10 }}>Review and adjust fields below</div>
                             <button onClick={e=>{e.stopPropagation();handleClearImage()}} style={{ background:'rgba(255,107,107,0.1)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.2)', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontSize:12 }}>Clear & Re-upload</button>
                           </>
@@ -724,8 +729,8 @@ function Vault() {
                   ):(
                     <>
                       <div style={{ fontSize:36, marginBottom:10 }}>📸</div>
-                      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, marginBottom:4 }}>Drop a photo or tap to use camera</div>
-                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>AI will identify your item and fill in the details</div>
+                      <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, marginBottom:4 }}>Drop a photo or tap to choose</div>
+                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>Select from your photo library or take a new photo</div>
                       <span style={{ background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'5px 14px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>✨ AI-Powered</span>
                     </>
                   )}
@@ -742,7 +747,10 @@ function Vault() {
               <div><label style={lbl}>Grading Service</label><select value={form.grading_service||''} onChange={e=>setForm(p=>({...p,grading_service:e.target.value}))} style={inp}>{GRADERS.map(c=><option key={c}>{c}</option>)}</select></div>
               <div>
                 <label style={lbl}>Quantity</label>
-                <input type="number" min="1" value={form.quantity||1} onChange={e=>setForm(p=>({...p,quantity:Math.max(1,parseInt(e.target.value)||1)}))} style={inp} placeholder="1" />
+                <input type="number" min="1" value={form.quantity===''?'':form.quantity||1}
+                  onChange={e=>setForm(p=>({...p,quantity:e.target.value===''?'':Math.max(1,parseInt(e.target.value)||1)}))}
+                  onBlur={e=>setForm(p=>({...p,quantity:Math.max(1,parseInt(e.target.value)||1)}))}
+                  style={inp} placeholder="1" />
               </div>
               <div><label style={lbl}>Market Value ($) <span style={{ color:'#555', fontSize:10 }}>per item</span></label><input type="number" value={form.market_value||''} onChange={e=>setForm(p=>({...p,market_value:e.target.value}))} style={inp} placeholder="0" /></div>
               <div><label style={lbl}>Purchase Price ($) <span style={{ color:'#555', fontSize:10 }}>per item, optional</span></label><input type="number" value={form.purchase_price||''} onChange={e=>setForm(p=>({...p,purchase_price:e.target.value}))} style={inp} placeholder="Leave blank if unknown" /></div>
@@ -815,9 +823,9 @@ function DealScanner() {
         <div style={{ gridColumn:'1/-1' }}>
           <label style={slbl}>Photo of Item *</label>
           <div onClick={()=>fileRef.current?.click()} style={{ border:'2px dashed rgba(212,175,55,0.3)', borderRadius:14, padding:'24px', textAlign:'center', cursor:'pointer', background:imagePreview?'transparent':'rgba(212,175,55,0.03)', minHeight:120, display:'flex', alignItems:'center', justifyContent:'center' }}>
-            <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
+            <input ref={fileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
             {imagePreview?<img src={imagePreview} alt="Preview" style={{ maxHeight:200, maxWidth:'100%', borderRadius:10, objectFit:'contain' }} />
-              :<div><div style={{ fontSize:32, marginBottom:8 }}>📸</div><div style={{ color:'#7A8B9A', fontSize:13 }}>Tap to take photo or upload</div></div>}
+              :<div><div style={{ fontSize:32, marginBottom:8 }}>📸</div><div style={{ color:'#7A8B9A', fontSize:13 }}>Tap to choose photo or take a new one</div></div>}
           </div>
         </div>
         <div><label style={slbl}>Asking Price ($) <span style={{ color:'#555', fontSize:10, textTransform:'none' }}>optional</span></label><input type="number" value={askingPrice} onChange={e=>setAskingPrice(e.target.value)} style={sinp} placeholder="e.g. 150" /></div>
