@@ -112,44 +112,45 @@ function useDebounce(value, delay) {
   return debounced
 }
 function Vault() {
-  const [items,         setItems]         = useState([])
-  const [loading,       setLoading]       = useState(true)
-  const [loadingMore,   setLoadingMore]   = useState(false)
-  const [hasMore,       setHasMore]       = useState(true)
-  const [page,          setPage]          = useState(0)
-  const [totalCount,    setTotalCount]    = useState(0)
-  const [view,          setView]          = useState('gallery')
-  const [selected,      setSelected]      = useState(null)
-  const [selectedFull,  setSelectedFull]  = useState(null)
-  const [form,          setForm]          = useState(EMPTY)
-  const [editingId,     setEditingId]     = useState(null)
-  const [imagePreview,  setImagePreview]  = useState(null)
-  const [aiLoading,     setAiLoading]     = useState(false)
-  const [aiError,       setAiError]       = useState('')
-  const [aiHints,       setAiHints]       = useState('')
-  const [uploadStatus,  setUploadStatus]  = useState('idle')
-  const [uploadedKey,   setUploadedKey]   = useState(null)
-  const [uploadedUrl,   setUploadedUrl]   = useState(null)
-  const [saving,        setSaving]        = useState(false)
-  const [filterCat,     setFilterCat]     = useState('All')
-  const [searchQ,       setSearchQ]       = useState('')
-  const [sortBy,        setSortBy]        = useState('created_at')
-  const [refreshing,    setRefreshing]    = useState(false)
-  const [refreshResult, setRefreshResult] = useState(null)
-  const [grading,       setGrading]       = useState(false)
-  const [gradingResult, setGradingResult] = useState(null)
+  const [items,          setItems]          = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [loadingMore,    setLoadingMore]    = useState(false)
+  const [hasMore,        setHasMore]        = useState(true)
+  const [page,           setPage]           = useState(0)
+  const [totalCount,     setTotalCount]     = useState(0)
+  const [view,           setView]           = useState('gallery')
+  const [selected,       setSelected]       = useState(null)
+  const [selectedFull,   setSelectedFull]   = useState(null)
+  const [form,           setForm]           = useState(EMPTY)
+  const [editingId,      setEditingId]      = useState(null)
+  const [imagePreview,   setImagePreview]   = useState(null)
+  const [aiLoading,      setAiLoading]      = useState(false)
+  const [aiError,        setAiError]        = useState('')
+  const [aiHints,        setAiHints]        = useState('')
+  const [uploadStatus,   setUploadStatus]   = useState('idle')
+  const [uploadedKey,    setUploadedKey]    = useState(null)
+  const [uploadedUrl,    setUploadedUrl]    = useState(null)
+  const [saving,         setSaving]         = useState(false)
+  const [filterCat,      setFilterCat]      = useState('All')
+  const [searchQ,        setSearchQ]        = useState('')
+  const [sortBy,         setSortBy]         = useState('created_at')
+  const [refreshing,     setRefreshing]     = useState(false)
+  const [refreshPolling, setRefreshPolling] = useState(false)
+  const [grading,        setGrading]        = useState(false)
+  const [gradingResult,  setGradingResult]  = useState(null)
+  const [totals,         setTotals]         = useState({ value:0, cost:0, count:0 })
   const fileRef = useRef()
   const cacheRef = useRef({})
 
   const debouncedSearch = useDebounce(searchQ, 300)
 
   useEffect(() => {
-    setItems([])
-    setPage(0)
-    setHasMore(true)
+    setItems([]); setPage(0); setHasMore(true)
     cacheRef.current = {}
     fetchItems(0, true)
   }, [filterCat, sortBy, debouncedSearch])
+
+  useEffect(() => { fetchTotals() }, [])
 
   async function fetchItems(pageNum = 0, reset = false) {
     const cacheKey = `${filterCat}-${sortBy}-${debouncedSearch}-${pageNum}`
@@ -164,7 +165,7 @@ function Vault() {
     const to   = from + PAGE_SIZE - 1
     let query = supabase
       .from('items')
-      .select('id,name,year,category,player,team,manufacturer,condition,grading_service,grade_score,market_value,purchase_price,image_url,quantity,created_at', { count:'exact' })
+      .select('id,name,year,category,player,team,manufacturer,condition,grading_service,grade_score,market_value,purchase_price,image_url,quantity,price_refreshing,created_at', { count:'exact' })
     if (filterCat !== 'All') query = query.eq('category', filterCat)
     if (debouncedSearch) query = query.or(`name.ilike.%${debouncedSearch}%,player.ilike.%${debouncedSearch}%,team.ilike.%${debouncedSearch}%`)
     if (sortBy === 'market_value') query = query.order('market_value', { ascending:false })
@@ -193,13 +194,9 @@ function Vault() {
 
   async function refetchAll() {
     cacheRef.current = {}
-    setPage(0)
-    setHasMore(true)
+    setPage(0); setHasMore(true)
     await fetchItems(0, true)
   }
-
-  const [totals, setTotals] = useState({ value:0, cost:0, count:0 })
-  useEffect(() => { fetchTotals() }, [])
 
   async function fetchTotals() {
     const { data } = await supabase.from('items').select('market_value,purchase_price,quantity')
@@ -214,20 +211,15 @@ function Vault() {
     setUploadStatus('uploading')
     try {
       const res = await fetch('/api/upload-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageData: base64, filename, contentType: 'image/jpeg' })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ imageData:base64, filename, contentType:'image/jpeg' })
       })
       if (!res.ok) throw new Error('Upload failed')
       const data = await res.json()
-      setUploadedKey(data.key)
-      setUploadedUrl(data.url)
-      setUploadStatus('done')
+      setUploadedKey(data.key); setUploadedUrl(data.url); setUploadStatus('done')
       return data
     } catch (err) {
-      setUploadStatus('error')
-      console.error('R2 upload error:', err)
-      return null
+      setUploadStatus('error'); console.error('R2 upload error:', err); return null
     }
   }
 
@@ -235,23 +227,16 @@ function Vault() {
     if (!key && !url) return
     try {
       await fetch('/api/upload-image', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        method:'DELETE', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ key, url })
       })
-    } catch (err) {
-      console.error('R2 delete error:', err)
-    }
+    } catch (err) { console.error('R2 delete error:', err) }
   }
 
   const handleImageUpload = useCallback(async (file) => {
     if (!file) return
-    setAiLoading(true)
-    setAiError('')
-    setUploadStatus('idle')
-    setUploadedKey(null)
-    setUploadedUrl(null)
-
+    setAiLoading(true); setAiError(''); setUploadStatus('idle')
+    setUploadedKey(null); setUploadedUrl(null)
     try {
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -260,7 +245,6 @@ function Vault() {
         reader.readAsDataURL(file)
       })
       setImagePreview(dataUrl)
-
       const img = new Image()
       img.src = dataUrl
       await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
@@ -272,9 +256,7 @@ function Vault() {
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
       const compressed = canvas.toDataURL('image/jpeg', 0.85)
       const base64 = compressed.split(',')[1]
-
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
-
       const [aiResult] = await Promise.all([
         fetch('/api/analyze', {
           method:'POST', headers:{'Content-Type':'application/json'},
@@ -282,24 +264,21 @@ function Vault() {
         }).then(r => r.json()),
         uploadToR2(base64, `${Date.now()}.jpg`)
       ])
-
       if (aiResult.error) throw new Error(aiResult.error)
-
       setForm(prev => ({
         ...prev, ...aiResult,
         market_value:    aiResult.marketValue    ?? aiResult.market_value    ?? '',
         grading_service: aiResult.gradingService ?? aiResult.grading_service ?? '',
         grade_score:     aiResult.gradeScore     ?? aiResult.grade_score     ?? '',
         serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
-        purchase_price:  prev.purchase_price,
-        purchase_date:   prev.purchase_date,
-        quantity:        prev.quantity || 1,
-        dataSource:      aiResult.dataSource || 'AI estimate',
-        salesCount:      aiResult.salesCount || 0,
-        priceRange:      aiResult.priceRange || null,
-        marketVelocity:  aiResult.marketVelocity || null,
-        demandLevel:     aiResult.demandLevel || null,
-        quickTake:       aiResult.quickTake || null,
+        purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
+        quantity: prev.quantity || 1,
+        dataSource:     aiResult.dataSource || 'AI estimate',
+        salesCount:     aiResult.salesCount || 0,
+        priceRange:     aiResult.priceRange || null,
+        marketVelocity: aiResult.marketVelocity || null,
+        demandLevel:    aiResult.demandLevel || null,
+        quickTake:      aiResult.quickTake || null,
       }))
     } catch(err) { setAiError(`Analysis failed: ${err.message}`) }
     setAiLoading(false)
@@ -314,9 +293,7 @@ function Vault() {
   async function cleanupUploadedImage() {
     if (uploadedKey) {
       await deleteFromR2(uploadedKey, uploadedUrl)
-      setUploadedKey(null)
-      setUploadedUrl(null)
-      setUploadStatus('idle')
+      setUploadedKey(null); setUploadedUrl(null); setUploadStatus('idle')
     }
   }
 
@@ -334,15 +311,11 @@ function Vault() {
         market_value:form.market_value ? Number(form.market_value) : null,
         purchase_price:form.purchase_price ? Number(form.purchase_price) : null,
         purchase_date:form.purchase_date||null, serial_number:form.serial_number||null,
-        notes:form.notes||null, image_url, image_path,
-        quantity: Number(form.quantity) || 1,
+        notes:form.notes||null, image_url, image_path, quantity:Number(form.quantity)||1,
       }
       if (editingId) { await supabase.from('items').update(payload).eq('id',editingId) }
       else { await supabase.from('items').insert(payload) }
-      await refetchAll()
-      await fetchTotals()
-      resetForm()
-      setView('gallery')
+      await refetchAll(); await fetchTotals(); resetForm(); setView('gallery')
     } catch(err) { alert('Save failed: '+err.message) }
     setSaving(false)
   }
@@ -352,71 +325,74 @@ function Vault() {
     const item = items.find(i=>i.id===id) || selectedFull
     if (item?.image_path || item?.image_url) await deleteFromR2(item.image_path, item.image_url)
     await supabase.from('items').delete().eq('id',id)
-    await refetchAll()
-    await fetchTotals()
+    await refetchAll(); await fetchTotals()
     if (selected?.id===id) { setSelected(null); setSelectedFull(null); setView('gallery') }
   }
 
   async function handleEdit(item) {
     const { data } = await supabase.from('items').select('*').eq('id', item.id).single()
     const fullItem = data || item
-    setForm({...EMPTY,...fullItem, quantity: fullItem.quantity || 1})
-    setImagePreview(fullItem.image_url||null)
-    setEditingId(fullItem.id)
-    setView('add')
+    setForm({...EMPTY,...fullItem, quantity:fullItem.quantity||1})
+    setImagePreview(fullItem.image_url||null); setEditingId(fullItem.id); setView('add')
   }
 
   async function openDetail(item) {
-    setSelected(item)
-    setView('detail')
+    setSelected(item); setView('detail')
     const { data } = await supabase.from('items').select('*').eq('id', item.id).single()
     setSelectedFull(data || item)
   }
 
   function resetForm() {
-    setForm(EMPTY)
-    setImagePreview(null)
-    setEditingId(null)
-    setAiError('')
-    setAiHints('')
-    setUploadStatus('idle')
-    setUploadedKey(null)
-    setUploadedUrl(null)
+    setForm(EMPTY); setImagePreview(null); setEditingId(null)
+    setAiError(''); setAiHints(''); setUploadStatus('idle')
+    setUploadedKey(null); setUploadedUrl(null)
   }
 
-  async function handleCancel() {
-    await cleanupUploadedImage()
-    resetForm()
-    setView('gallery')
-  }
-
-  async function handleClearImage() {
-    await cleanupUploadedImage()
-    setImagePreview(null)
-    setForm(EMPTY)
-  }
+  async function handleCancel() { await cleanupUploadedImage(); resetForm(); setView('gallery') }
+  async function handleClearImage() { await cleanupUploadedImage(); setImagePreview(null); setForm(EMPTY) }
 
   async function handleRefresh(item) {
-    setRefreshing(true); setRefreshResult(null)
+    setRefreshing(true)
     try {
-      const res = await fetch('/api/refresh', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(item) })
-      if (!res.ok) throw new Error('Refresh failed')
-      const data = await res.json()
-      setRefreshResult({ ...data, itemId:item.id, oldValue:item.market_value })
+      const res = await fetch('/api/refresh', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          id: item.id, name: item.name, player: item.player,
+          team: item.team, year: item.year, category: item.category,
+          manufacturer: item.manufacturer, condition: item.condition,
+          grading_service: item.grading_service, grade_score: item.grade_score,
+        })
+      })
+      if (!res.ok) throw new Error('Failed to start refresh')
+      pollForRefresh(item.id)
     } catch(err) { alert('Refresh failed: '+err.message) }
     setRefreshing(false)
   }
 
-  async function applyRefresh() {
-    if (!refreshResult) return
-    await supabase.from('items').update({ market_value:refreshResult.marketValue }).eq('id',refreshResult.itemId)
-    await refetchAll()
-    await fetchTotals()
-    if (selected?.id===refreshResult.itemId) {
-      setSelected(prev=>({...prev, market_value:refreshResult.marketValue}))
-      setSelectedFull(prev=>({...prev, market_value:refreshResult.marketValue}))
+  async function pollForRefresh(itemId) {
+    setRefreshPolling(true)
+    const maxAttempts = 24
+    let attempts = 0
+    const poll = async () => {
+      attempts++
+      const { data } = await supabase
+        .from('items')
+        .select('market_value,price_refreshing,price_last_refreshed')
+        .eq('id', itemId)
+        .single()
+      if (data && !data.price_refreshing) {
+        setRefreshPolling(false)
+        await refetchAll(); await fetchTotals()
+        if (selected?.id === itemId) {
+          setSelectedFull(prev => ({...prev, market_value:data.market_value}))
+          setSelected(prev => ({...prev, market_value:data.market_value}))
+        }
+        return
+      }
+      if (attempts < maxAttempts) setTimeout(poll, 5000)
+      else setRefreshPolling(false)
     }
-    setRefreshResult(null)
+    setTimeout(poll, 5000)
   }
 
   async function handleGradeAdvisor(item) {
@@ -433,7 +409,6 @@ function Vault() {
   const detailItem = selectedFull || selected
   return (
     <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0A0F1C 0%,#111827 50%,#0D1520 100%)', color:'#F0E6C8' }}>
-      {/* Header */}
       <div style={{ borderBottom:'1px solid rgba(212,175,55,0.15)', padding:'0 20px', paddingTop:'env(safe-area-inset-top)', display:'flex', alignItems:'center', justifyContent:'space-between', height:'calc(60px + env(safe-area-inset-top))', background:'rgba(0,0,0,0.4)', backdropFilter:'blur(16px)', position:'sticky', top:0, zIndex:100 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#D4AF37,#A0832A)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>⚾</div>
@@ -455,8 +430,8 @@ function Vault() {
       <div style={{ padding:'20px', paddingBottom:'calc(20px + env(safe-area-inset-bottom))', maxWidth:1400, margin:'0 auto' }}>
         <div style={{ display:'flex', gap:12, marginBottom:24, flexWrap:'wrap' }}>
           <StatCard label="Total Items"      value={totals.count} />
-          <StatCard label="Collection Value" value={fmt(totals.value)}            accent="#D4AF37" />
-          <StatCard label="Invested"         value={fmt(totals.cost)}             accent="#4ECDC4" />
+          <StatCard label="Collection Value" value={fmt(totals.value)}             accent="#D4AF37" />
+          <StatCard label="Invested"         value={fmt(totals.cost)}              accent="#4ECDC4" />
           <StatCard label="Gain"             value={fmt(totals.value-totals.cost)} accent={totals.value-totals.cost>=0?'#96CEB4':'#FF6B6B'} />
         </div>
 
@@ -493,14 +468,15 @@ function Vault() {
                     }
                     <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
                     {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
+                    {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating price…</div>}
                   </div>
                   <div style={{ padding:'12px 14px' }}>
                     <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
                     <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <div>
-                        <div style={{ fontSize:17, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{fmt(item.market_value)}</div>
-                        {(item.quantity||1) > 1 && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
+                        <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳ Refreshing…':fmt(item.market_value)}</div>
+                        {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
                       </div>
                       {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
                     </div>
@@ -542,12 +518,12 @@ function Vault() {
                 </thead>
                 <tbody>
                   {items.map(item=>{
-                    const qty = Number(item.quantity)||1
-                    const unitVal = Number(item.market_value)||0
-                    const totalVal = unitVal * qty
-                    const totalCost = (Number(item.purchase_price)||0) * qty
-                    const gain = totalVal - totalCost
-                    const hasCost = !!item.purchase_price
+                    const qty=Number(item.quantity)||1
+                    const unitVal=Number(item.market_value)||0
+                    const totalVal=unitVal*qty
+                    const totalCost=(Number(item.purchase_price)||0)*qty
+                    const gain=totalVal-totalCost
+                    const hasCost=!!item.purchase_price
                     return (
                       <tr key={item.id} style={{ borderBottom:'1px solid rgba(255,255,255,0.05)', cursor:'pointer' }}
                         onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
@@ -559,8 +535,8 @@ function Vault() {
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#D4AF37', fontWeight:700 }}>{qty}</td>
                         <td style={{ padding:'10px 14px' }}>{item.condition?<Badge text={item.condition} color="#7A8B9A"/>:'—'}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#4ECDC4', fontSize:11 }}>{item.grading_service&&item.grade_score?`${item.grading_service} ${item.grade_score}`:'—'}</td>
-                        <td style={{ padding:'10px 14px', color:'#7A8B9A', fontSize:12 }}>{fmt(unitVal)}</td>
-                        <td style={{ padding:'10px 14px', fontFamily:"'Playfair Display',serif", fontWeight:700, color:'#D4AF37', fontSize:14 }}>{fmt(totalVal)}</td>
+                        <td style={{ padding:'10px 14px', color:item.price_refreshing?'#4ECDC4':'#7A8B9A', fontSize:12 }}>{item.price_refreshing?'⏳':fmt(unitVal)}</td>
+                        <td style={{ padding:'10px 14px', fontFamily:"'Playfair Display',serif", fontWeight:700, color:'#D4AF37', fontSize:14 }}>{item.price_refreshing?'⏳':fmt(totalVal)}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#7A8B9A' }}>{item.purchase_price?fmt(totalCost):'—'}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:!hasCost?'#7A8B9A':gain>=0?'#96CEB4':'#FF6B6B' }}>{!hasCost?'—':(gain>=0?'+':'')+fmt(gain)}</td>
                         <td style={{ padding:'10px 14px', whiteSpace:'nowrap' }}>
@@ -599,8 +575,9 @@ function Vault() {
                   </div>
                   <div style={{ marginTop:14, display:'flex', flexDirection:'column', gap:8 }}>
                     <button onClick={()=>handleEdit(detailItem)} style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:10, padding:'10px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>✏️ Edit Item</button>
-                    <button onClick={()=>handleRefresh(detailItem)} disabled={refreshing} style={{ background:'rgba(78,205,196,0.15)', color:'#4ECDC4', border:'1px solid rgba(78,205,196,0.3)', borderRadius:10, padding:'10px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>
-                      {refreshing?'Refreshing…':'📈 Refresh Market Value'}
+                    <button onClick={()=>handleRefresh(detailItem)} disabled={refreshing||refreshPolling}
+                      style={{ background:'rgba(78,205,196,0.15)', color:'#4ECDC4', border:'1px solid rgba(78,205,196,0.3)', borderRadius:10, padding:'10px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>
+                      {refreshing?'Starting…':refreshPolling?'⏳ Updating price…':'📈 Refresh Market Value'}
                     </button>
                     <button onClick={()=>handleGradeAdvisor(detailItem)} disabled={grading} style={{ background:'rgba(199,125,255,0.15)', color:'#C77DFF', border:'1px solid rgba(199,125,255,0.3)', borderRadius:10, padding:'10px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>
                       {grading?'Analyzing…':'🏅 Should I Grade This?'}
@@ -615,7 +592,13 @@ function Vault() {
                   <div style={{ display:'flex', gap:16, marginBottom:24, flexWrap:'wrap' }}>
                     <div>
                       <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:2, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Unit Value</div>
-                      <div style={{ fontSize:26, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{fmt(detailItem.market_value)}</div>
+                      {refreshPolling && selected?.id===detailItem.id
+                        ? <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                            <div style={{ width:20, height:20, borderRadius:'50%', border:'2px solid rgba(78,205,196,0.2)', borderTop:'2px solid #4ECDC4', animation:'spin 0.8s linear infinite' }} />
+                            <div style={{ fontSize:14, color:'#4ECDC4', fontFamily:"'Space Mono',monospace" }}>Fetching eBay price…</div>
+                          </div>
+                        : <div style={{ fontSize:26, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{fmt(detailItem.market_value)}</div>
+                      }
                     </div>
                     {(detailItem.quantity||1) > 1 && (
                       <div>
@@ -640,32 +623,6 @@ function Vault() {
                     <div style={{ fontSize:9, color:'#D4AF37', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:5 }}>Notes</div>
                     <div style={{ fontSize:14, lineHeight:1.6, color:'#C0AE8A' }}>{detailItem.notes}</div>
                   </div>}
-
-                  {refreshResult&&refreshResult.itemId===detailItem.id&&(
-                    <div style={{ marginBottom:16, background:'rgba(78,205,196,0.05)', border:'1px solid rgba(78,205,196,0.2)', borderRadius:12, padding:'16px' }}>
-                      <div style={{ fontSize:11, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:10 }}>📈 Market Refresh</div>
-                      <div style={{ display:'flex', gap:20, marginBottom:10, flexWrap:'wrap' }}>
-                        <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Previous</div><div style={{ fontSize:18, color:'#7A8B9A', fontFamily:"'Playfair Display',serif" }}>{fmt(refreshResult.oldValue)}</div></div>
-                        <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Updated</div><div style={{ fontSize:22, fontWeight:700, color:'#4ECDC4', fontFamily:"'Playfair Display',serif" }}>{fmt(refreshResult.marketValue)}</div></div>
-                        <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Confidence</div><Badge text={refreshResult.confidence} color={refreshResult.confidence==='high'?'#96CEB4':refreshResult.confidence==='medium'?'#D4AF37':'#FF6B6B'} /></div>
-                        {refreshResult.salesCount > 0 && <div><div style={{ fontSize:10, color:'#7A8B9A', marginBottom:3 }}>Sales Analyzed</div><div style={{ fontSize:14, color:'#F0E6C8' }}>{refreshResult.salesCount}</div></div>}
-                      </div>
-                      {refreshResult.priceRange && (
-                        <div style={{ display:'flex', gap:12, marginBottom:10, flexWrap:'wrap' }}>
-                          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Range: <span style={{ color:'#F0E6C8' }}>{refreshResult.priceRange}</span></div>
-                          {refreshResult.marketVelocity && <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Velocity: <span style={{ color:'#F0E6C8' }}>{refreshResult.marketVelocity}</span></div>}
-                          {refreshResult.demandLevel && <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Demand: <span style={{ color:'#F0E6C8' }}>{refreshResult.demandLevel}</span></div>}
-                          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>Source: <span style={{ color:'#4ECDC4' }}>{refreshResult.dataSource || 'AI estimate'}</span></div>
-                        </div>
-                      )}
-                      <p style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6, marginBottom:12 }}>{refreshResult.reasoning}</p>
-                      <div style={{ display:'flex', gap:8 }}>
-                        <button onClick={applyRefresh} style={{ background:'linear-gradient(135deg,#4ECDC4,#2EA8A0)', color:'#0A0F1C', border:'none', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12, fontWeight:700 }}>Apply Update</button>
-                        <button onClick={()=>setRefreshResult(null)} style={{ background:'transparent', color:'#7A8B9A', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>Dismiss</button>
-                      </div>
-                    </div>
-                  )}
-
                   {gradingResult&&(
                     <div style={{ background:'rgba(199,125,255,0.05)', border:'1px solid rgba(199,125,255,0.2)', borderRadius:12, padding:'16px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
