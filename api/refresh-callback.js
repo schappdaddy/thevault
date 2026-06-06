@@ -2,26 +2,28 @@ export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
-if (req.method !== 'POST' && req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
-
-// For GET requests (Apify webhook verification)
-if (req.method === 'GET') return res.status(200).json({ ok: true });
+  if (req.method === 'GET') return res.status(200).json({ ok: true });
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   let body = req.body;
   if (typeof body === 'string') {
     try { body = JSON.parse(body) } catch { return res.status(400).json({ error: 'Invalid JSON' }) }
   }
 
-  const { itemId, itemName, player, year, category, manufacturer, condition, grading_service, grade_score, datasetId } = body;
+  console.log('Callback body:', JSON.stringify(body).slice(0, 500))
 
-  console.log(`Callback received for item: ${itemName} (${itemId}), dataset: ${datasetId}`)
+  const { itemId, itemName, player, year, category, condition, grading_service, grade_score } = body;
+  const datasetId = body.datasetId || body.resource?.defaultDatasetId
+  const runId = body.runId || body.resource?.id
 
-  if (!itemId || !datasetId) {
-    return res.status(400).json({ error: 'Missing itemId or datasetId' })
+  console.log(`Callback received for item: ${itemName} (${itemId}), dataset: ${datasetId}, run: ${runId}`)
+
+  if (!itemId) {
+    return res.status(400).json({ error: 'Missing itemId' })
   }
 
   const { createClient } = await import('@supabase/supabase-js')
@@ -32,13 +34,19 @@ if (req.method === 'GET') return res.status(200).json({ ok: true });
 
   try {
     // Fetch results from Apify dataset
-    const datasetRes = await fetch(
-      `https://api.apify.com/v2/datasets/${datasetId}/items?token=${process.env.APIFY_API_TOKEN}`
-    )
+    const datasetUrl = datasetId
+      ? `https://api.apify.com/v2/datasets/${datasetId}/items?token=${process.env.APIFY_API_TOKEN}`
+      : `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${process.env.APIFY_API_TOKEN}`
+
+    console.log(`Fetching dataset from: ${datasetUrl.split('?')[0]}`)
+
+    const datasetRes = await fetch(datasetUrl)
 
     if (!datasetRes.ok) throw new Error(`Dataset fetch failed: ${datasetRes.status}`)
 
     const items = await datasetRes.json()
+    console.log(`Dataset returned ${items.length} items`)
+
     const summary = items.find(i => i.summary)?.summary
     const meta = items.find(i => i.meta)?.meta
 
@@ -55,6 +63,8 @@ if (req.method === 'GET') return res.status(200).json({ ok: true });
         itemsAnalyzed:    meta?.itemsAnalyzed,
       }
       console.log(`eBay data for ${itemName}: $${ebayData.recommendedPrice}`)
+    } else {
+      console.log('No summary found in dataset, items:', JSON.stringify(items).slice(0, 300))
     }
 
     // Build Claude prompt with real data
@@ -69,7 +79,6 @@ if (req.method === 'GET') return res.status(200).json({ ok: true });
 Use this real market data as the primary source for your valuation.`
       : `No eBay data available. Use your training knowledge to estimate.`
 
-    // Ask Claude to analyze and return structured valuation
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -87,10 +96,8 @@ Use this real market data as the primary source for your valuation.`
 Item details:
 - Name: ${itemName}
 - Player: ${player || 'Unknown'}
-- Team: 'Unknown'
 - Year: ${year || 'Unknown'}
 - Category: ${category || 'Unknown'}
-- Manufacturer: ${manufacturer || 'Unknown'}
 - Condition: ${condition || 'Unknown'}
 - Grading Service: ${grading_service || 'Ungraded'}
 - Grade Score: ${grade_score || 'N/A'}
@@ -102,10 +109,6 @@ Respond ONLY with a valid JSON object, no markdown, no preamble:
   "marketValue": recommended market value as a number only,
   "reasoning": "2-3 sentence explanation referencing real sales data if available",
   "confidence": "high, medium, or low",
-  "priceRange": "${ebayData ? `$${ebayData.priceLow} - $${ebayData.priceHigh}` : 'unknown'}",
-  "salesCount": ${ebayData?.itemsAnalyzed || 0},
-  "marketVelocity": "${ebayData?.marketVelocity || 'unknown'}",
-  "demandLevel": "${ebayData?.demandLevel || 'unknown'}",
   "dataSource": "${ebayData ? 'eBay sold listings' : 'AI estimate'}"
 }`
         }]
@@ -119,10 +122,12 @@ Respond ONLY with a valid JSON object, no markdown, no preamble:
     const clean = text.replace(/```json|```/g, '').trim()
     const valuation = JSON.parse(clean)
 
+    console.log(`Valuation for ${itemName}: $${valuation.marketValue}`)
+
     // Update Supabase with new price and clear refreshing flag
     await supabase.from('items').update({
-      market_value:        valuation.marketValue,
-      price_refreshing:    false,
+      market_value:         valuation.marketValue,
+      price_refreshing:     false,
       price_last_refreshed: new Date().toISOString(),
     }).eq('id', itemId)
 
@@ -131,7 +136,6 @@ Respond ONLY with a valid JSON object, no markdown, no preamble:
 
   } catch (err) {
     console.error('Callback error:', err)
-    // Clear the refreshing flag so user isn't stuck
     await supabase.from('items').update({ price_refreshing: false }).eq('id', itemId)
     return res.status(500).json({ error: err.message })
   }
