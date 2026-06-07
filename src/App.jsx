@@ -27,6 +27,7 @@ const CAT_COLOR = {
 }
 
 const fmt = v => (!v && v !== 0) ? '—' : '$' + Number(v).toLocaleString()
+const titleCase = s => s ? s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : s
 
 const inp = {
   background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.12)',
@@ -39,6 +40,11 @@ const lbl = {
 }
 const card = {
   background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'14px 18px',
+}
+const selStyle = {
+  background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.12)',
+  borderRadius:8, color:'#F0E6C8', padding:'8px 10px', fontSize:12,
+  fontFamily:"'Space Mono',monospace", outline:'none', cursor:'pointer',
 }
 
 function Badge({ text, color='#7A8B9A' }) {
@@ -102,7 +108,6 @@ export default function App() {
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <Vault />
 }
-
 function Vault() {
   const [items,          setItems]          = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -123,30 +128,70 @@ function Vault() {
   const [uploadedKey,    setUploadedKey]    = useState(null)
   const [uploadedUrl,    setUploadedUrl]    = useState(null)
   const [saving,         setSaving]         = useState(false)
-  const [filterCat,      setFilterCat]      = useState('All')
-  const [searchQ,        setSearchQ]        = useState('')
   const [sortBy,         setSortBy]         = useState('created_at')
   const [refreshing,     setRefreshing]     = useState(false)
   const [refreshPolling, setRefreshPolling] = useState(false)
   const [grading,        setGrading]        = useState(false)
   const [gradingResult,  setGradingResult]  = useState(null)
   const [totals,         setTotals]         = useState({ value:0, cost:0, count:0 })
+  const [showFilters,    setShowFilters]    = useState(false)
+  const [filterOptions,  setFilterOptions]  = useState({})
+  const [submittedSearch, setSubmittedSearch] = useState('')
+  const [searchQ,        setSearchQ]        = useState('')
+
+  const [filterCat,          setFilterCat]          = useState('')
+  const [filterYear,         setFilterYear]         = useState('')
+  const [filterTeam,         setFilterTeam]         = useState('')
+  const [filterPlayer,       setFilterPlayer]       = useState('')
+  const [filterManufacturer, setFilterManufacturer] = useState('')
+  const [filterCondition,    setFilterCondition]    = useState('')
+  const [filterGrader,       setFilterGrader]       = useState('')
+  const [filterGrade,        setFilterGrade]        = useState('')
+  const [filterPriceSource,  setFilterPriceSource]  = useState('')
+
   const fileRef = useRef()
   const cacheRef = useRef({})
 
-const [submittedSearch, setSubmittedSearch] = useState('')
-const debouncedSearch = submittedSearch
-  
+  const activeFilterCount = [filterCat, filterYear, filterTeam, filterPlayer,
+    filterManufacturer, filterCondition, filterGrader, filterGrade, filterPriceSource, submittedSearch
+  ].filter(Boolean).length
+
+  function clearAllFilters() {
+    setFilterCat(''); setFilterYear(''); setFilterTeam(''); setFilterPlayer('')
+    setFilterManufacturer(''); setFilterCondition(''); setFilterGrader('')
+    setFilterGrade(''); setFilterPriceSource(''); setSubmittedSearch(''); setSearchQ('')
+  }
+
   useEffect(() => {
     setItems([]); setPage(0); setHasMore(true)
     cacheRef.current = {}
     fetchItems(0, true)
-  }, [filterCat, sortBy, debouncedSearch])
+  }, [filterCat, filterYear, filterTeam, filterPlayer, filterManufacturer,
+      filterCondition, filterGrader, filterGrade, filterPriceSource, sortBy, submittedSearch])
 
-  useEffect(() => { fetchTotals() }, [])
+  useEffect(() => { fetchTotals(); fetchFilterOptions() }, [])
+
+  async function fetchFilterOptions() {
+    const { data } = await supabase
+      .from('items')
+      .select('category,year,team,player,manufacturer,condition,grading_service,grade_score,price_data_source')
+    if (!data) return
+    const unique = (field) => [...new Set(data.map(i => i[field]).filter(Boolean))].sort()
+    setFilterOptions({
+      categories:    unique('category'),
+      years:         [...new Set(data.map(i => i.year).filter(Boolean))].sort((a,b) => b-a),
+      teams:         unique('team'),
+      players:       unique('player'),
+      manufacturers: unique('manufacturer'),
+      conditions:    CONDITIONS.filter(c => data.some(i => i.condition === c)),
+      graders:       unique('grading_service'),
+      grades:        [...new Set(data.map(i => i.grade_score).filter(Boolean))].sort((a,b) => b-a),
+      priceSources:  unique('price_data_source'),
+    })
+  }
 
   async function fetchItems(pageNum = 0, reset = false) {
-    const cacheKey = `${filterCat}-${sortBy}-${debouncedSearch}-${pageNum}`
+    const cacheKey = `${filterCat}-${filterYear}-${filterTeam}-${filterPlayer}-${filterManufacturer}-${filterCondition}-${filterGrader}-${filterGrade}-${filterPriceSource}-${sortBy}-${submittedSearch}-${pageNum}`
     if (cacheRef.current[cacheKey] && !reset) {
       if (pageNum === 0) setItems(cacheRef.current[cacheKey])
       else setItems(prev => [...prev, ...cacheRef.current[cacheKey]])
@@ -158,13 +203,24 @@ const debouncedSearch = submittedSearch
     const to   = from + PAGE_SIZE - 1
     let query = supabase
       .from('items')
-      .select('id,name,year,category,player,team,manufacturer,condition,grading_service,grade_score,market_value,purchase_price,image_url,quantity,price_refreshing,created_at', { count:'exact' })
-    if (filterCat !== 'All') query = query.eq('category', filterCat)
-    if (debouncedSearch) query = query.or(`name.ilike.%${debouncedSearch}%,player.ilike.%${debouncedSearch}%,team.ilike.%${debouncedSearch}%`)
+      .select('id,name,year,category,player,team,manufacturer,condition,grading_service,grade_score,market_value,purchase_price,image_url,quantity,price_refreshing,price_data_source,created_at', { count:'exact' })
+
+    if (filterCat)          query = query.eq('category', filterCat)
+    if (filterYear)         query = query.eq('year', filterYear)
+    if (filterTeam)         query = query.eq('team', filterTeam)
+    if (filterPlayer)       query = query.eq('player', filterPlayer)
+    if (filterManufacturer) query = query.eq('manufacturer', filterManufacturer)
+    if (filterCondition)    query = query.eq('condition', filterCondition)
+    if (filterGrader)       query = query.eq('grading_service', filterGrader)
+    if (filterGrade)        query = query.eq('grade_score', filterGrade)
+    if (filterPriceSource)  query = query.eq('price_data_source', filterPriceSource)
+    if (submittedSearch)    query = query.or(`name.ilike.%${submittedSearch}%,player.ilike.%${submittedSearch}%,team.ilike.%${submittedSearch}%`)
+
     if (sortBy === 'market_value') query = query.order('market_value', { ascending:false })
     else if (sortBy === 'year')    query = query.order('year', { ascending:false })
     else if (sortBy === 'name')    query = query.order('name', { ascending:true })
     else                           query = query.order('created_at', { ascending:false })
+
     query = query.range(from, to)
     const { data, error, count } = await query
     if (!error) {
@@ -266,12 +322,7 @@ const debouncedSearch = submittedSearch
         serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
         purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
         quantity: prev.quantity || 1,
-        dataSource:     aiResult.dataSource || 'AI estimate',
-        salesCount:     aiResult.salesCount || 0,
-        priceRange:     aiResult.priceRange || null,
-        marketVelocity: aiResult.marketVelocity || null,
-        demandLevel:    aiResult.demandLevel || null,
-        quickTake:      aiResult.quickTake || null,
+        dataSource: 'AI estimate',
       }))
     } catch(err) { setAiError(`Analysis failed: ${err.message}`) }
     setAiLoading(false)
@@ -305,10 +356,12 @@ const debouncedSearch = submittedSearch
         purchase_price:form.purchase_price ? Number(form.purchase_price) : null,
         purchase_date:form.purchase_date||null, serial_number:form.serial_number||null,
         notes:form.notes||null, image_url, image_path, quantity:Number(form.quantity)||1,
+        price_data_source: 'AI estimate',
       }
       if (editingId) { await supabase.from('items').update(payload).eq('id',editingId) }
       else { await supabase.from('items').insert(payload) }
-      await refetchAll(); await fetchTotals(); resetForm(); setView('gallery')
+      await refetchAll(); await fetchTotals(); await fetchFilterOptions()
+      resetForm(); setView('gallery')
     } catch(err) { alert('Save failed: '+err.message) }
     setSaving(false)
   }
@@ -318,7 +371,7 @@ const debouncedSearch = submittedSearch
     const item = items.find(i=>i.id===id) || selectedFull
     if (item?.image_path || item?.image_url) await deleteFromR2(item.image_path, item.image_url)
     await supabase.from('items').delete().eq('id',id)
-    await refetchAll(); await fetchTotals()
+    await refetchAll(); await fetchTotals(); await fetchFilterOptions()
     if (selected?.id===id) { setSelected(null); setSelectedFull(null); setView('gallery') }
   }
 
@@ -370,14 +423,14 @@ const debouncedSearch = submittedSearch
       attempts++
       const { data } = await supabase
         .from('items')
-        .select('market_value,price_refreshing,price_last_refreshed')
+        .select('market_value,price_refreshing,price_last_refreshed,price_data_source')
         .eq('id', itemId)
         .single()
       if (data && !data.price_refreshing) {
         setRefreshPolling(false)
-        await refetchAll(); await fetchTotals()
+        await refetchAll(); await fetchTotals(); await fetchFilterOptions()
         if (selected?.id === itemId) {
-          setSelectedFull(prev => ({...prev, market_value:data.market_value}))
+          setSelectedFull(prev => ({...prev, market_value:data.market_value, price_data_source:data.price_data_source}))
           setSelected(prev => ({...prev, market_value:data.market_value}))
         }
         return
@@ -400,6 +453,82 @@ const debouncedSearch = submittedSearch
 
   const verdictColor = v => v==='Worth Grading'?'#96CEB4':v==='Not Worth Grading'?'#FF6B6B':'#D4AF37'
   const detailItem = selectedFull || selected
+
+  function FilterPanel() {
+    return (
+      <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'16px', marginBottom:16 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
+          {[
+            ['Category', filterCat, setFilterCat, filterOptions.categories],
+            ['Year', filterYear, setFilterYear, filterOptions.years],
+            ['Team', filterTeam, setFilterTeam, filterOptions.teams],
+            ['Player', filterPlayer, setFilterPlayer, filterOptions.players],
+            ['Manufacturer', filterManufacturer, setFilterManufacturer, filterOptions.manufacturers],
+            ['Condition', filterCondition, setFilterCondition, filterOptions.conditions],
+            ['Grader', filterGrader, setFilterGrader, filterOptions.graders],
+            ['Grade', filterGrade, setFilterGrade, filterOptions.grades],
+            ['Price Source', filterPriceSource, setFilterPriceSource, filterOptions.priceSources],
+          ].map(([label, value, setter, options]) => (
+            <div key={label}>
+              <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>{label}</div>
+              <select value={value} onChange={e=>setter(e.target.value)} style={{ ...selStyle, width:'100%' }}>
+                <option value="">All</option>
+                {options?.map(o=><option key={o}>{o}</option>)}
+              </select>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  function Toolbar({ showSort=true }) {
+    return (
+      <div style={{ marginBottom:16 }}>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:8 }}>
+          <input
+            placeholder="Search…"
+            value={searchQ}
+            onChange={e=>setSearchQ(e.target.value)}
+            onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
+            style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }}
+          />
+          <button onClick={()=>setSubmittedSearch(searchQ)}
+            style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+            Search
+          </button>
+          {submittedSearch && (
+            <button onClick={()=>{ setSearchQ(''); setSubmittedSearch('') }}
+              style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+              Clear
+            </button>
+          )}
+          <button onClick={()=>setShowFilters(f=>!f)}
+            style={{ background:showFilters||activeFilterCount>0?'rgba(212,175,55,0.15)':'transparent', color:activeFilterCount>0?'#D4AF37':'#7A8B9A', border:activeFilterCount>0?'1px solid rgba(212,175,55,0.3)':'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+            🔽 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+          </button>
+          {activeFilterCount > 0 && (
+            <button onClick={clearAllFilters}
+              style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+              Clear All
+            </button>
+          )}
+          {showSort && (
+            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...selStyle, marginLeft:'auto' }}>
+              <option value="created_at">Recently Added</option>
+              <option value="market_value">Highest Value</option>
+              <option value="year">Year</option>
+              <option value="name">Name</option>
+            </select>
+          )}
+          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginLeft:showSort?0:'auto' }}>
+            {items.length} of {totalCount}
+          </div>
+        </div>
+        {showFilters && <FilterPanel />}
+      </div>
+    )
+  }
   return (
     <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0A0F1C 0%,#111827 50%,#0D1520 100%)', color:'#F0E6C8' }}>
       <div style={{ borderBottom:'1px solid rgba(212,175,55,0.15)', padding:'0 20px', paddingTop:'env(safe-area-inset-top)', display:'flex', alignItems:'center', justifyContent:'space-between', height:'calc(60px + env(safe-area-inset-top))', background:'rgba(0,0,0,0.4)', backdropFilter:'blur(16px)', position:'sticky', top:0, zIndex:100 }}>
@@ -433,60 +562,43 @@ const debouncedSearch = submittedSearch
         {/* GALLERY */}
         {!loading && view==='gallery' && (
           <div className="fade-in">
-            <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-              <input
-  placeholder="Search…"
-  value={searchQ}
-  onChange={e=>setSearchQ(e.target.value)}
-  onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
-  style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }}
-/>
-<button
-  onClick={()=>setSubmittedSearch(searchQ)}
-  style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace", whiteSpace:'nowrap' }}>
-  Search
-</button>
-              <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...inp, width:'auto', padding:'8px 10px', fontSize:12 }}>
-                <option value="created_at">Recently Added</option>
-                <option value="market_value">Highest Value</option>
-                <option value="year">Year</option>
-                <option value="name">Name</option>
-              </select>
-              <div style={{ marginLeft:'auto', fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>{items.length} of {totalCount} items</div>
-            </div>
-            <div style={{ display:'flex', gap:6, marginBottom:20, flexWrap:'wrap' }}>
-              {['All',...CATEGORIES].map(c=>(
-                <button key={c} onClick={()=>setFilterCat(c)} style={{ background:filterCat===c?'rgba(212,175,55,0.15)':'transparent', color:filterCat===c?'#D4AF37':'#7A8B9A', border:filterCat===c?'1px solid rgba(212,175,55,0.4)':'1px solid rgba(255,255,255,0.1)', borderRadius:20, padding:'4px 12px', fontSize:11, cursor:'pointer', fontFamily:"'Space Mono',monospace", transition:'all 0.2s' }}>{c}</button>
-              ))}
-            </div>
+            <Toolbar showSort={true} />
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
-              {items.map(item=>(
-                <div key={item.id} onClick={()=>openDetail(item)}
-                  style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)' }}
-                  onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
-                  onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-                  <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden' }}>
-                    {item.image_url
-                      ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0 }} />
-                      : (CAT_EMOJI[item.category]||'📦')
-                    }
-                    <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
-                    {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
-                    {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating price…</div>}
-                  </div>
-                  <div style={{ padding:'12px 14px' }}>
-                    <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
-                    <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                      <div>
-                        <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳ Refreshing…':fmt(item.market_value)}</div>
-                        {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
+              {items.map(item=>{
+                const isEbay = item.price_data_source === 'eBay sold listings'
+                return (
+                  <div key={item.id} onClick={()=>openDetail(item)}
+                    style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)' }}
+                    onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
+                    onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
+                    <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden' }}>
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0 }} />
+                        : (CAT_EMOJI[item.category]||'📦')
+                      }
+                      <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
+                      {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
+                      {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating…</div>}
+                    </div>
+                    <div style={{ padding:'12px 14px' }}>
+                      <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
+                      <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
+                          {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                          {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
+                          <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>
+                            {isEbay ? '📊 eBay' : '🤖 AI'}
+                          </span>
+                        </div>
                       </div>
-                      {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {items.length===0&&!loading&&<div style={{ gridColumn:'1/-1', textAlign:'center', padding:'60px 0', color:'#7A8B9A' }}><div style={{ fontSize:48, marginBottom:12 }}>🏟️</div><div style={{ fontFamily:"'Playfair Display',serif", fontSize:20 }}>No items found</div></div>}
             </div>
             {hasMore && (
@@ -503,30 +615,12 @@ const debouncedSearch = submittedSearch
         {/* TABLE */}
         {!loading && view==='table' && (
           <div className="fade-in">
-            <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
-              <input
-  placeholder="Search…"
-  value={searchQ}
-  onChange={e=>setSearchQ(e.target.value)}
-  onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
-  style={{ ...inp, width:200, padding:'8px 12px', fontSize:13 }}
-/>
-<button
-  onClick={()=>setSubmittedSearch(searchQ)}
-  style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace", whiteSpace:'nowrap' }}>
-  Search
-</button>
-              <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp, width:'auto', fontSize:12 }}>
-                <option value="All">All Categories</option>
-                {CATEGORIES.map(c=><option key={c}>{c}</option>)}
-              </select>
-              <div style={{ marginLeft:'auto', fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>{items.length} of {totalCount} · {fmt(totals.value)}</div>
-            </div>
+            <Toolbar showSort={true} />
             <div style={{ overflowX:'auto', borderRadius:12, border:'1px solid rgba(255,255,255,0.08)' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
                   <tr style={{ background:'rgba(212,175,55,0.08)', borderBottom:'1px solid rgba(212,175,55,0.15)' }}>
-                    {['Item','Category','Player','Year','Qty','Condition','Grade','Unit Value','Total Value','Paid','Gain/Loss',''].map(h=>(
+                    {['Item','Category','Player','Year','Qty','Condition','Grade','Price Source','Unit Value','Total Value','Paid','Gain/Loss',''].map(h=>(
                       <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:10, letterSpacing:1.5, textTransform:'uppercase', color:'#D4AF37', fontFamily:"'Space Mono',monospace", whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
@@ -539,6 +633,7 @@ const debouncedSearch = submittedSearch
                     const totalCost=(Number(item.purchase_price)||0)*qty
                     const gain=totalVal-totalCost
                     const hasCost=!!item.purchase_price
+                    const isEbay = item.price_data_source === 'eBay sold listings'
                     return (
                       <tr key={item.id} style={{ borderBottom:'1px solid rgba(255,255,255,0.05)', cursor:'pointer' }}
                         onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.03)'}
@@ -550,6 +645,7 @@ const debouncedSearch = submittedSearch
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#D4AF37', fontWeight:700 }}>{qty}</td>
                         <td style={{ padding:'10px 14px' }}>{item.condition?<Badge text={item.condition} color="#7A8B9A"/>:'—'}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#4ECDC4', fontSize:11 }}>{item.grading_service&&item.grade_score?`${item.grading_service} ${item.grade_score}`:'—'}</td>
+                        <td style={{ padding:'10px 14px', fontSize:11, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>{isEbay?'📊 eBay':'🤖 AI'}</td>
                         <td style={{ padding:'10px 14px', color:item.price_refreshing?'#4ECDC4':'#7A8B9A', fontSize:12 }}>{item.price_refreshing?'⏳':fmt(unitVal)}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Playfair Display',serif", fontWeight:700, color:'#D4AF37', fontSize:14 }}>{item.price_refreshing?'⏳':fmt(totalVal)}</td>
                         <td style={{ padding:'10px 14px', fontFamily:"'Space Mono',monospace", color:'#7A8B9A' }}>{item.purchase_price?fmt(totalCost):'—'}</td>
@@ -584,7 +680,7 @@ const debouncedSearch = submittedSearch
                 <div>
                   <div style={{ height:280, borderRadius:14, overflow:'hidden', background:'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:72, border:'1px solid rgba(255,255,255,0.08)', position:'relative' }}>
                     {detailItem.image_url
-                      ? <img src={detailItem.image_url} alt={detailItem.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                      ? <img src={detailItem.image_url} alt={detailItem.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
                       : (CAT_EMOJI[detailItem.category]||'📦')
                     }
                   </div>
@@ -601,7 +697,15 @@ const debouncedSearch = submittedSearch
                   </div>
                 </div>
                 <div>
-                  <Badge text={detailItem.category} color={CAT_COLOR[detailItem.category]} />
+                  <div style={{ display:'flex', gap:8, marginBottom:8, flexWrap:'wrap' }}>
+                    <Badge text={detailItem.category} color={CAT_COLOR[detailItem.category]} />
+                    {detailItem.price_data_source && (
+                      <Badge
+                        text={detailItem.price_data_source==='eBay sold listings'?'📊 eBay Priced':'🤖 AI Estimate'}
+                        color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#7A8B9A'}
+                      />
+                    )}
+                  </div>
                   <h1 style={{ fontFamily:"'Playfair Display',serif", fontSize:26, fontWeight:700, margin:'8px 0 4px', lineHeight:1.2 }}>{detailItem.name}</h1>
                   <p style={{ color:'#7A8B9A', fontFamily:"'Space Mono',monospace", fontSize:11, margin:'0 0 20px' }}>{[detailItem.player,detailItem.team,detailItem.year].filter(Boolean).join(' · ')}</p>
                   <div style={{ display:'flex', gap:16, marginBottom:24, flexWrap:'wrap' }}>
@@ -638,79 +742,74 @@ const debouncedSearch = submittedSearch
                     <div style={{ fontSize:9, color:'#D4AF37', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:5 }}>Notes</div>
                     <div style={{ fontSize:14, lineHeight:1.6, color:'#C0AE8A' }}>{detailItem.notes}</div>
                   </div>}
+
                   {detailItem.price_last_refreshed && (
-    <div style={{ background:'rgba(78,205,196,0.05)', border:'1px solid rgba(78,205,196,0.15)', borderRadius:12, padding:'16px', marginBottom:16 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <div style={{ fontSize:10, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace" }}>📈 Last Market Refresh</div>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          {detailItem.price_confidence && (
-            <Badge
-              text={detailItem.price_confidence}
-              color={detailItem.price_confidence==='high'?'#96CEB4':detailItem.price_confidence==='medium'?'#D4AF37':'#7A8B9A'}
-            />
-          )}
-         {detailItem.price_data_source && (
-  <Badge
-    text={detailItem.price_data_source==='AI estimate — eBay unavailable' ? 'AI estimate' : detailItem.price_data_source}
-    color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#FF6B6B'}
-  />
-)}
-{detailItem.price_data_source==='AI estimate — eBay unavailable' && (
-  <div style={{ gridColumn:'1/-1', background:'rgba(255,107,107,0.08)', border:'1px solid rgba(255,107,107,0.25)', borderRadius:8, padding:'10px 14px', marginTop:8 }}>
-    <div style={{ fontSize:12, color:'#FF6B6B', fontFamily:"'Space Mono',monospace" }}>
-      ⚠️ eBay pricing unavailable — Apify credits may be empty. Add credits at console.apify.com → Billing to restore real market data.
-    </div>
-  </div>
-)}
-        </div>
-      </div>
+                    <div style={{ background:'rgba(78,205,196,0.05)', border:'1px solid rgba(78,205,196,0.15)', borderRadius:12, padding:'16px', marginBottom:16 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+                        <div style={{ fontSize:10, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace" }}>📈 Last Market Refresh</div>
+                        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                          {detailItem.price_confidence && (
+                            <Badge text={detailItem.price_confidence} color={detailItem.price_confidence==='high'?'#96CEB4':detailItem.price_confidence==='medium'?'#D4AF37':'#7A8B9A'} />
+                          )}
+                          {detailItem.price_data_source && (
+                            <Badge
+                              text={detailItem.price_data_source==='AI estimate — eBay unavailable'?'AI estimate':detailItem.price_data_source}
+                              color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#FF6B6B'}
+                            />
+                          )}
+                        </div>
+                      </div>
+                      {detailItem.price_data_source==='AI estimate — eBay unavailable' && (
+                        <div style={{ background:'rgba(255,107,107,0.08)', border:'1px solid rgba(255,107,107,0.25)', borderRadius:8, padding:'10px 14px', marginBottom:12 }}>
+                          <div style={{ fontSize:12, color:'#FF6B6B', fontFamily:"'Space Mono',monospace" }}>
+                            ⚠️ eBay pricing unavailable — Apify credits may be empty. Add credits at console.apify.com → Billing.
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ display:'flex', gap:12, marginBottom:12, flexWrap:'wrap' }}>
+                        {detailItem.price_range && (
+                          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+                            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Price Range</div>
+                            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_range}</div>
+                          </div>
+                        )}
+                        {detailItem.price_market_velocity && (
+                          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+                            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Market Velocity</div>
+                            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{titleCase(detailItem.price_market_velocity)}</div>
+                          </div>
+                        )}
+                        {detailItem.price_demand_level && (
+                          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+                            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Demand</div>
+                            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{titleCase(detailItem.price_demand_level)}</div>
+                          </div>
+                        )}
+                        {detailItem.price_sales_count && (
+                          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+                            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Sales Analyzed</div>
+                            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_sales_count}</div>
+                          </div>
+                        )}
+                      </div>
+                      {detailItem.price_quick_take && (
+                        <div style={{ background:'rgba(78,205,196,0.05)', borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
+                          <div style={{ fontSize:9, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Market Insight</div>
+                          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_quick_take}</div>
+                        </div>
+                      )}
+                      {detailItem.price_reasoning && (
+                        <div style={{ marginBottom:8 }}>
+                          <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>AI Analysis</div>
+                          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_reasoning}</div>
+                        </div>
+                      )}
+                      <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginTop:8 }}>
+                        Last updated: {new Date(detailItem.price_last_refreshed).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                      </div>
+                    </div>
+                  )}
 
-      <div style={{ display:'flex', gap:12, marginBottom:12, flexWrap:'wrap' }}>
-        {detailItem.price_range && (
-          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
-            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Price Range</div>
-            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_range}</div>
-          </div>
-        )}
-        {detailItem.price_market_velocity && (
-          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
-            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Market Velocity</div>
-            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_market_velocity}</div>
-          </div>
-        )}
-        {detailItem.price_demand_level && (
-          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
-            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Demand</div>
-            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_demand_level}</div>
-          </div>
-        )}
-        {detailItem.price_sales_count && (
-          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
-            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Sales Analyzed</div>
-            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_sales_count}</div>
-          </div>
-        )}
-      </div>
-
-      {detailItem.price_quick_take && (
-        <div style={{ background:'rgba(78,205,196,0.05)', borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
-          <div style={{ fontSize:9, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Market Insight</div>
-          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_quick_take}</div>
-        </div>
-      )}
-
-      {detailItem.price_reasoning && (
-        <div style={{ marginBottom:8 }}>
-          <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>AI Analysis</div>
-          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_reasoning}</div>
-        </div>
-      )}
-
-      <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginTop:8 }}>
-        Last updated: {new Date(detailItem.price_last_refreshed).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })}
-      </div>
-    </div>
-  )}
                   {gradingResult&&(
                     <div style={{ background:'rgba(199,125,255,0.05)', border:'1px solid rgba(199,125,255,0.2)', borderRadius:12, padding:'16px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
@@ -752,7 +851,7 @@ const debouncedSearch = submittedSearch
         {view==='add' && (
           <div className="fade-in" style={{ maxWidth:760, margin:'0 auto' }}>
             <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:24, marginBottom:6 }}>{editingId?'Edit Item':'Add to The Vault'}</h2>
-            <p style={{ color:'#7A8B9A', fontSize:14, marginBottom:24 }}>{editingId?'Update the details for this item.':'Drop a photo — AI identifies your item and gets real eBay pricing automatically.'}</p>
+            <p style={{ color:'#7A8B9A', fontSize:14, marginBottom:24 }}>{editingId?'Update the details for this item.':'Drop a photo — AI identifies your item automatically.'}</p>
             {!editingId&&(
               <>
                 <div style={{ marginBottom:16 }}>
@@ -766,24 +865,14 @@ const debouncedSearch = submittedSearch
                     <div style={{ display:'flex', gap:16, alignItems:'flex-start', textAlign:'left' }}>
                       <img src={imagePreview} alt="Preview" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0 }} />
                       <div style={{ flex:1 }}>
-                        {aiLoading?<Spinner label="Analyzing item + fetching eBay prices…" />:(
+                        {aiLoading?<Spinner label="Analyzing your item…" />:(
                           <>
                             {aiError?<div style={{ color:'#FF6B6B', fontSize:13, marginBottom:8 }}>⚠️ {aiError}</div>
                               :<div style={{ color:'#96CEB4', fontSize:13, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ AI analysis complete</div>}
                             {uploadStatus==='uploading'&&<div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⬆️ Uploading image…</div>}
                             {uploadStatus==='done'&&<div style={{ color:'#96CEB4', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ Image ready</div>}
                             {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed</div>}
-                            {form.dataSource==='eBay sold listings' && form.salesCount > 0 && (
-                              <div style={{ background:'rgba(78,205,196,0.08)', border:'1px solid rgba(78,205,196,0.2)', borderRadius:8, padding:'8px 12px', marginBottom:8 }}>
-                                <div style={{ color:'#4ECDC4', fontSize:11, fontFamily:"'Space Mono',monospace", marginBottom:4 }}>📊 Based on {form.salesCount} recent eBay sales</div>
-                                {form.priceRange && <div style={{ color:'#7A8B9A', fontSize:11 }}>Range: {form.priceRange}</div>}
-                                {form.marketVelocity && <div style={{ color:'#7A8B9A', fontSize:11 }}>Velocity: {form.marketVelocity} · Demand: {form.demandLevel}</div>}
-                                {form.quickTake && <div style={{ color:'#C0AE8A', fontSize:11, marginTop:4, lineHeight:1.4 }}>{form.quickTake}</div>}
-                              </div>
-                            )}
-                            {form.dataSource==='AI estimate' && !aiError && (
-                              <div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⚠️ AI estimate — no eBay data found</div>
-                            )}
+                            <div style={{ color:'#7A8B9A', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>🤖 AI estimate — tap Refresh Market Value for real eBay pricing</div>
                             <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:10 }}>Review and adjust fields below</div>
                             <button onClick={e=>{e.stopPropagation();handleClearImage()}} style={{ background:'rgba(255,107,107,0.1)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.2)', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontSize:12 }}>Clear & Re-upload</button>
                           </>
@@ -794,8 +883,8 @@ const debouncedSearch = submittedSearch
                     <>
                       <div style={{ fontSize:36, marginBottom:10 }}>📸</div>
                       <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, marginBottom:4 }}>Drop a photo or tap to choose</div>
-                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>AI identifies your item and fetches real eBay pricing</div>
-                      <span style={{ background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'5px 14px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>✨ AI + Real Market Data</span>
+                      <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:12 }}>AI identifies your item and estimates value instantly</div>
+                      <span style={{ background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'5px 14px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>✨ AI-Powered</span>
                     </>
                   )}
                 </div>
@@ -919,7 +1008,7 @@ function DealScanner() {
           <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
             <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'14px 18px', flex:1, minWidth:120 }}>
               <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Market Value</div>
-              <div style={{ fontSize:22, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{fmt(result.marketValue)}</div>
+              <div style={{ fontSize:22, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{result.marketValue ? '$'+Number(result.marketValue).toLocaleString() : '—'}</div>
             </div>
             {askingPrice&&<div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'14px 18px', flex:1, minWidth:120 }}>
               <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Asking Price</div>
