@@ -55,12 +55,12 @@ export default async function handler(req, res) {
   // UPLOAD image
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { imageData, filename, contentType } = req.body
+  const { imageData, filename, contentType, overwriteKey } = req.body
   if (!imageData) return res.status(400).json({ error: 'No image data provided' })
 
   try {
     const buffer = Buffer.from(imageData.replace(/ /g, '+'), 'base64')
-    const key = `${Date.now()}-${filename || 'image.jpg'}`
+    const key = overwriteKey || `${Date.now()}-${filename || 'image.jpg'}`
 
     await r2.send(new PutObjectCommand({
       Bucket: BUCKET,
