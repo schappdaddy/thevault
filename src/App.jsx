@@ -634,12 +634,19 @@ function Vault() {
               color={detailItem.price_confidence==='high'?'#96CEB4':detailItem.price_confidence==='medium'?'#D4AF37':'#7A8B9A'}
             />
           )}
-          {detailItem.price_data_source && (
-            <Badge
-              text={detailItem.price_data_source}
-              color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#7A8B9A'}
-            />
-          )}
+         {detailItem.price_data_source && (
+  <Badge
+    text={detailItem.price_data_source==='AI estimate — eBay unavailable' ? 'AI estimate' : detailItem.price_data_source}
+    color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#FF6B6B'}
+  />
+)}
+{detailItem.price_data_source==='AI estimate — eBay unavailable' && (
+  <div style={{ gridColumn:'1/-1', background:'rgba(255,107,107,0.08)', border:'1px solid rgba(255,107,107,0.25)', borderRadius:8, padding:'10px 14px', marginTop:8 }}>
+    <div style={{ fontSize:12, color:'#FF6B6B', fontFamily:"'Space Mono',monospace" }}>
+      ⚠️ eBay pricing unavailable — Apify credits may be empty. Add credits at console.apify.com → Billing to restore real market data.
+    </div>
+  </div>
+)}
         </div>
       </div>
 
