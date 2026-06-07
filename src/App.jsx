@@ -985,45 +985,59 @@ function ImageLightbox({ item, onClose, onSaved }) {
     setRotation(r => (r + deg + 360) % 360)
   }
 
-  async function handleSave() {
-    setSaving(true)
-    try {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.src = item.image_url + '?t=' + Date.now()
-      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject })
+async function handleSave() {
+  setSaving(true)
+  try {
+    // Load image from URL with cache bust
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    await new Promise((resolve, reject) => {
+      img.onload = resolve
+      img.onerror = () => reject(new Error('Image load failed — CORS issue'))
+      img.src = item.image_url + (item.image_url.includes('?') ? '&' : '?') + 't=' + Date.now()
+    })
 
-      const rad = (rotation * Math.PI) / 180
-      const sin = Math.abs(Math.sin(rad))
-      const cos = Math.abs(Math.cos(rad))
-      const w = img.naturalWidth
-      const h = img.naturalHeight
-      const newW = Math.round(w * cos + h * sin)
-      const newH = Math.round(w * sin + h * cos)
+    const rad = (rotation * Math.PI) / 180
+    const sin = Math.abs(Math.sin(rad))
+    const cos = Math.abs(Math.cos(rad))
+    const w = img.naturalWidth
+    const h = img.naturalHeight
+    const newW = Math.round(w * cos + h * sin)
+    const newH = Math.round(w * sin + h * cos)
 
-      const MAX = 1200
-      const scale = Math.min(MAX/newW, MAX/newH, 1)
-      const canvas = document.createElement('canvas')
-      canvas.width  = Math.round(newW * scale)
-      canvas.height = Math.round(newH * scale)
-      const ctx = canvas.getContext('2d')
-      ctx.translate(canvas.width/2, canvas.height/2)
-      ctx.rotate(rad)
-      ctx.drawImage(img, -w*scale/2, -h*scale/2, w*scale, h*scale)
+    const MAX = 1200
+    const scale = Math.min(MAX/newW, MAX/newH, 1)
+    const canvas = document.createElement('canvas')
+    canvas.width  = Math.round(newW * scale)
+    canvas.height = Math.round(newH * scale)
+    const ctx = canvas.getContext('2d')
+    ctx.translate(canvas.width/2, canvas.height/2)
+    ctx.rotate(rad)
+    ctx.drawImage(img, -w*scale/2, -h*scale/2, w*scale, h*scale)
 
-      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
-      const key = item.image_path || item.image_url.split('/').pop()
+    const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+    const key = item.image_path || item.image_url.split('/').pop()
 
-      const res = await fetch('/api/upload-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imageData: base64,
-          filename: key,
-          contentType: 'image/jpeg',
-          overwriteKey: key,
-        })
+    const res = await fetch('/api/upload-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        imageData: base64,
+        filename: key,
+        contentType: 'image/jpeg',
+        overwriteKey: key,
       })
+    })
+
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || 'Upload failed')
+    await onSaved()
+  } catch(err) {
+    console.error('Lightbox save error:', err)
+    alert('Save failed: ' + err.message)
+  }
+  setSaving(false)
+}
 
       if (!res.ok) throw new Error('Upload failed')
       await onSaved()
