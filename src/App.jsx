@@ -295,16 +295,18 @@ function Vault() {
       })
       setImagePreview(dataUrl)
       const img = new Image()
-      img.src = dataUrl
-      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
-      const canvas = document.createElement('canvas')
-      const MAX = 1200
-      const scale = Math.min(MAX/img.width, MAX/img.height, 1)
-      canvas.width  = Math.round(img.width  * scale)
-      canvas.height = Math.round(img.height * scale)
-      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-      const compressed = canvas.toDataURL('image/jpeg', 0.85)
-      const base64 = compressed.split(',')[1]
+img.src = dataUrl
+await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
+const MAX = 1200
+const w = img.naturalWidth
+const h = img.naturalHeight
+const scale = Math.min(MAX/w, MAX/h, 1)
+const canvas = document.createElement('canvas')
+canvas.width  = Math.round(w * scale)
+canvas.height = Math.round(h * scale)
+canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+const compressed = canvas.toDataURL('image/jpeg', 0.85)
+const base64 = compressed.split(',')[1]
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
       const [aiResult] = await Promise.all([
         fetch('/api/analyze', {
