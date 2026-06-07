@@ -1039,14 +1039,6 @@ async function handleSave() {
   setSaving(false)
 }
 
-      if (!res.ok) throw new Error('Upload failed')
-      await onSaved()
-    } catch(err) {
-      alert('Save failed: ' + err.message)
-    }
-    setSaving(false)
-  }
-
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
       {/* Header */}
