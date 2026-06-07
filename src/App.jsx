@@ -544,6 +544,9 @@ function Vault() {
       onClose={()=>setLightboxItem(null)}
       onSaved={async ()=>{
         setLightboxItem(null)
+        // Force cache bust by updating image_url with timestamp in Supabase
+        const cacheBustUrl = lightboxItem.image_url.split('?')[0] + '?t=' + Date.now()
+        await supabase.from('items').update({ image_url: cacheBustUrl }).eq('id', lightboxItem.id)
         await refetchAll()
         if (selected?.id === lightboxItem.id) {
           const { data } = await supabase.from('items').select('*').eq('id', lightboxItem.id).single()
