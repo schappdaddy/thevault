@@ -36,14 +36,14 @@ export default async function handler(req, res) {
     const datasetRes = await fetch(datasetUrl)
     if (!datasetRes.ok) throw new Error(`Dataset fetch failed: ${datasetRes.status}`)
 
-    const items = await datasetRes.json()
+   const items = await datasetRes.json()
     console.log(`Dataset items count: ${items.length}`)
-    console.log(`First item keys: ${Object.keys(items[0] || {}).join(', ')}`)
-    console.log(`First item sample: ${JSON.stringify(items[0]).slice(0, 400)}`)
 
-    // Handle both nested and flat response formats
+    // Find the summary item — it's the one with the flat summary keys
     let ebayData = null
-    const first = items[0]
+    const first = Array.isArray(items)
+      ? items.find(i => i['summary.recommendedPrice.display'] || i?.summary?.recommendedPrice) || items[0]
+      : items
 
     if (first) {
       // Try flat format first (what Apify actually returns)
