@@ -45,25 +45,29 @@ export default async function handler(req, res) {
     const items = await datasetRes.json()
     console.log(`Dataset returned ${items.length} items`)
 
-    const summary = items.find(i => i.summary)?.summary
-    const meta    = items.find(i => i.meta)?.meta
+    // Handle both nested and flat response formats
+const summaryItem = items[0] // Flat format returns single object
+const meta = summaryItem
 
-    let ebayData = null
-    if (summary?.recommendedPrice?.raw) {
-      ebayData = {
-        recommendedPrice: summary.recommendedPrice.raw,
-        priceLow:         summary.priceRange?.low?.raw,
-        priceHigh:        summary.priceRange?.high?.raw,
-        marketVelocity:   summary.marketVelocity,
-        demandLevel:      summary.demandLevel,
-        quickTake:        summary.quickTake,
-        confidence:       summary.confidence,
-        itemsAnalyzed:    meta?.itemsAnalyzed,
-      }
-      console.log(`eBay data for ${itemName}: $${ebayData.recommendedPrice}`)
-    } else {
-      console.log('No summary found, raw items:', JSON.stringify(items).slice(0, 300))
-    }
+let ebayData = null
+const recPrice = summaryItem?.['summary.recommendedPrice.display']?.replace('$','')
+  || summaryItem?.summary?.recommendedPrice?.raw
+
+if (recPrice) {
+  ebayData = {
+    recommendedPrice: parseFloat(recPrice),
+    priceLow:         parseFloat((summaryItem?.['summary.priceRange.low.display'] || '0').replace('$','')),
+    priceHigh:        parseFloat((summaryItem?.['summary.priceRange.high.display'] || '0').replace('$','')),
+    marketVelocity:   summaryItem?.['summary.marketVelocity'] || summaryItem?.summary?.marketVelocity,
+    demandLevel:      summaryItem?.['summary.demandLevel']    || summaryItem?.summary?.demandLevel,
+    quickTake:        summaryItem?.['summary.quickTake']      || summaryItem?.summary?.quickTake,
+    confidence:       summaryItem?.['summary.confidence']     || summaryItem?.summary?.confidence,
+    itemsAnalyzed:    summaryItem?.['meta.itemsAnalyzed']     || meta?.itemsAnalyzed,
+  }
+  console.log(`eBay data for ${itemName}: $${ebayData.recommendedPrice}`)
+} else {
+  console.log('No pricing found, raw item:', JSON.stringify(summaryItem).slice(0, 300))
+}
 
     const ebayContext = ebayData
       ? `Real eBay sold data (last 90 days, ${ebayData.itemsAnalyzed} sales):
