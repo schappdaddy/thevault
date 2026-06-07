@@ -103,14 +103,6 @@ export default function App() {
   return <Vault />
 }
 
-function useDebounce(value, delay) {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(t)
-  }, [value, delay])
-  return debounced
-}
 function Vault() {
   const [items,          setItems]          = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -142,8 +134,9 @@ function Vault() {
   const fileRef = useRef()
   const cacheRef = useRef({})
 
-  const debouncedSearch = useDebounce(searchQ, 300)
-
+const [submittedSearch, setSubmittedSearch] = useState('')
+const debouncedSearch = submittedSearch
+  
   useEffect(() => {
     setItems([]); setPage(0); setHasMore(true)
     cacheRef.current = {}
@@ -441,7 +434,18 @@ function Vault() {
         {!loading && view==='gallery' && (
           <div className="fade-in">
             <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
-              <input placeholder="Search…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }} />
+              <input
+  placeholder="Search…"
+  value={searchQ}
+  onChange={e=>setSearchQ(e.target.value)}
+  onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
+  style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }}
+/>
+<button
+  onClick={()=>setSubmittedSearch(searchQ)}
+  style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace", whiteSpace:'nowrap' }}>
+  Search
+</button>
               <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...inp, width:'auto', padding:'8px 10px', fontSize:12 }}>
                 <option value="created_at">Recently Added</option>
                 <option value="market_value">Highest Value</option>
@@ -500,7 +504,18 @@ function Vault() {
         {!loading && view==='table' && (
           <div className="fade-in">
             <div style={{ display:'flex', gap:8, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
-              <input placeholder="Search…" value={searchQ} onChange={e=>setSearchQ(e.target.value)} style={{ ...inp, width:200, padding:'8px 12px', fontSize:13 }} />
+              <input
+  placeholder="Search…"
+  value={searchQ}
+  onChange={e=>setSearchQ(e.target.value)}
+  onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
+  style={{ ...inp, width:200, padding:'8px 12px', fontSize:13 }}
+/>
+<button
+  onClick={()=>setSubmittedSearch(searchQ)}
+  style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace", whiteSpace:'nowrap' }}>
+  Search
+</button>
               <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...inp, width:'auto', fontSize:12 }}>
                 <option value="All">All Categories</option>
                 {CATEGORIES.map(c=><option key={c}>{c}</option>)}
