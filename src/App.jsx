@@ -583,14 +583,17 @@ function Vault() {
                     <div style={{ padding:'12px 14px' }}>
                       <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
                       <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end' }}>
-  <div>
+                      <div>
+  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:2 }}>
     <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
-    {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
-    <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay ? '📊 eBay' : '🤖 AI'}</span>
-  </div>
-  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
     {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
+  </div>
+  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+    {(item.quantity||1) > 1 && !item.price_refreshing
+      ? <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>
+      : <div />
+    }
+    <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay?'📊 eBay':'🤖 AI'}</span>
   </div>
 </div>
                     </div>
