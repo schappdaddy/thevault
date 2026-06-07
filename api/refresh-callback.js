@@ -121,11 +121,19 @@ Respond ONLY with a valid JSON object, no markdown, no preamble:
 
     console.log(`Valuation for ${itemName}: $${valuation.marketValue}`)
 
-    await supabase.from('items').update({
-      market_value:         valuation.marketValue,
-      price_refreshing:     false,
-      price_last_refreshed: new Date().toISOString(),
-    }).eq('id', itemId)
+   await supabase.from('items').update({
+  market_value:          valuation.marketValue,
+  price_refreshing:      false,
+  price_last_refreshed:  new Date().toISOString(),
+  price_reasoning:       valuation.reasoning || null,
+  price_confidence:      valuation.confidence || null,
+  price_data_source:     valuation.dataSource || null,
+  price_range:           ebayData ? `$${ebayData.priceLow} - $${ebayData.priceHigh}` : null,
+  price_market_velocity: ebayData?.marketVelocity || null,
+  price_demand_level:    ebayData?.demandLevel || null,
+  price_sales_count:     ebayData?.itemsAnalyzed || null,
+  price_quick_take:      ebayData?.quickTake || null,
+}).eq('id', itemId)
 
     console.log(`Updated ${itemName} to $${valuation.marketValue}`)
     return res.status(200).json({ success: true, marketValue: valuation.marketValue })
