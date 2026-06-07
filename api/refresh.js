@@ -22,15 +22,15 @@ export default async function handler(req, res) {
     // Mark item as refreshing
     await supabase.from('items').update({ price_refreshing: true }).eq('id', id)
 
-    // Build search query
-  const gradeInfo = grading_service && grade_score ? `${grading_service} ${grade_score}` : null
-const shortName = name?.split(' ').slice(0,5).join(' ')
-const queryParts = [player, year, shortName, gradeInfo].filter(Boolean)
-const searchQuery = queryParts.join(' ')
-console.log(`Search query: ${searchQuery}`)
+    // Build clean search query — player + year + grade only
+    const gradeInfo = grading_service && grade_score ? `${grading_service} ${grade_score}` : null
+    const queryParts = [player, year, gradeInfo].filter(Boolean)
+    const searchQuery = queryParts.join(' ')
+    console.log(`Search query: ${searchQuery}`)
+
     const callbackUrl = `https://thevault-iota.vercel.app/api/refresh-callback`
 
-    // Step 1 — Start the Apify run
+    // Start the Apify run
     const runRes = await fetch(
       `https://api.apify.com/v2/acts/marielise.dev~ebay-sold-listings-intelligence/runs?token=${process.env.APIFY_API_TOKEN}`,
       {
@@ -61,8 +61,8 @@ console.log(`Search query: ${searchQuery}`)
 
     console.log(`Apify run started: ${runId} for item: ${name}`)
 
-    // Step 2 — Register webhook using resource template
-    const safeName     = (name||'').replace(/"/g, '')
+    // Register webhook for this specific run
+    const safeName     = (name||'').replace(/"/g, '').replace(/&/g, 'and')
     const safePlayer   = (player||'').replace(/"/g, '')
     const safeYear     = (year||'').replace(/"/g, '')
     const safeCategory = (category||'').replace(/"/g, '')
