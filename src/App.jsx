@@ -567,34 +567,34 @@ function Vault() {
               {items.map(item=>{
                 const isEbay = item.price_data_source === 'eBay sold listings'
                 return (
-                  <div key={item.id} onClick={()=>openDetail(item)}
-                    style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)' }}
-                    onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
-                    onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-                    <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden' }}>
-                      {item.image_url
-                        ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0 }} />
-                        : (CAT_EMOJI[item.category]||'📦')
-                      }
-                      <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
-                      {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
-                      {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating…</div>}
-                    </div>
-                   <div style={{ padding:'12px 14px' }}>
-  <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
-  <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
-  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-    <div>
-      <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
-      {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
-    </div>
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
-      {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
-      <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay?'📊 eBay':'🤖 AI'}</span>
+                 <div key={item.id} onClick={()=>openDetail(item)}
+  style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)', display:'flex', flexDirection:'column' }}
+  onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
+  onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
+  <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden', flexShrink:0 }}>
+    {item.image_url
+      ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0 }} />
+      : (CAT_EMOJI[item.category]||'📦')
+    }
+    <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
+    {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
+    {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating…</div>}
+  </div>
+  <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', flex:1 }}>
+    <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
+    <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
+    <div style={{ marginTop:'auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div>
+        <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
+        {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+        {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
+        <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay?'📊 eBay':'🤖 AI'}</span>
+      </div>
     </div>
   </div>
 </div>
-                  </div>
                 )
               })}
               {items.length===0&&!loading&&<div style={{ gridColumn:'1/-1', textAlign:'center', padding:'60px 0', color:'#7A8B9A' }}><div style={{ fontSize:48, marginBottom:12 }}>🏟️</div><div style={{ fontFamily:"'Playfair Display',serif", fontSize:20 }}>No items found</div></div>}
