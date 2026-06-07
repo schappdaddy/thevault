@@ -308,24 +308,30 @@ canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
 const compressed = canvas.toDataURL('image/jpeg', 0.85)
 const base64 = compressed.split(',')[1]
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
-      const [aiResult] = await Promise.all([
-        fetch('/api/analyze', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ imageData:base64, mediaType:'image/jpeg', hints:hintsText })
-        }).then(r => r.json()),
-        uploadToR2(base64, `${Date.now()}.jpg`)
-      ])
-      if (aiResult.error) throw new Error(aiResult.error)
-      setForm(prev => ({
-        ...prev, ...aiResult,
-        market_value:    aiResult.marketValue    ?? aiResult.market_value    ?? '',
-        grading_service: aiResult.gradingService ?? aiResult.grading_service ?? '',
-        grade_score:     aiResult.gradeScore     ?? aiResult.grade_score     ?? '',
-        serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
-        purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
-        quantity: prev.quantity || 1,
-        dataSource: 'AI estimate',
-      }))
+
+if (editingId) {
+  // Edit mode — just upload the image, don't run AI or overwrite fields
+  await uploadToR2(base64, `${Date.now()}.jpg`)
+} else {
+  const [aiResult] = await Promise.all([
+    fetch('/api/analyze', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ imageData:base64, mediaType:'image/jpeg', hints:hintsText })
+    }).then(r => r.json()),
+    uploadToR2(base64, `${Date.now()}.jpg`)
+  ])
+  if (aiResult.error) throw new Error(aiResult.error)
+  setForm(prev => ({
+    ...prev, ...aiResult,
+    market_value:    aiResult.marketValue    ?? aiResult.market_value    ?? '',
+    grading_service: aiResult.gradingService ?? aiResult.grading_service ?? '',
+    grade_score:     aiResult.gradeScore     ?? aiResult.grade_score     ?? '',
+    serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
+    purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
+    quantity: prev.quantity || 1,
+    dataSource: 'AI estimate',
+  }))
+}
     } catch(err) { setAiError(`Analysis failed: ${err.message}`) }
     setAiLoading(false)
   }, [aiHints])
@@ -852,6 +858,27 @@ const base64 = compressed.split(',')[1]
           <div className="fade-in" style={{ maxWidth:760, margin:'0 auto' }}>
             <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:24, marginBottom:6 }}>{editingId?'Edit Item':'Add to The Vault'}</h2>
             <p style={{ color:'#7A8B9A', fontSize:14, marginBottom:24 }}>{editingId?'Update the details for this item.':'Drop a photo — AI identifies your item automatically.'}</p>
+            {editingId && (
+              <div style={{ marginBottom:24 }}>
+                <label style={lbl}>Photo <span style={{ color:'#555', fontSize:10, textTransform:'none', letterSpacing:0 }}>optional — replace existing photo</span></label>
+                <div style={{ display:'flex', gap:16, alignItems:'flex-start' }}>
+                  {imagePreview && (
+                    <img src={imagePreview} alt="Current" style={{ width:100, height:100, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0, imageOrientation:'from-image' }} />
+                  )}
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    <button onClick={()=>fileRef.current?.click()}
+                      style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 16px', cursor:'pointer', fontFamily:"'Space Mono',monospace", fontSize:12 }}>
+                      📸 {imagePreview ? 'Replace Photo' : 'Add Photo'}
+                    </button>
+                    {uploadStatus==='uploading' && <div style={{ color:'#D4AF37', fontSize:11, fontFamily:"'Space Mono',monospace" }}>⬆️ Uploading…</div>}
+                    {uploadStatus==='done' && <div style={{ color:'#96CEB4', fontSize:11, fontFamily:"'Space Mono',monospace" }}>✓ New photo ready</div>}
+                    {uploadStatus==='error' && <div style={{ color:'#FF6B6B', fontSize:11, fontFamily:"'Space Mono',monospace" }}>⚠️ Upload failed</div>}
+                    <div style={{ fontSize:11, color:'#7A8B9A' }}>Replacing the photo will fix rotation issues</div>
+                  </div>
+                </div>
+                <input ref={fileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
+              </div>
+            )}
             {!editingId&&(
               <>
                 <div style={{ marginBottom:16 }}>
