@@ -623,6 +623,72 @@ function Vault() {
                     <div style={{ fontSize:9, color:'#D4AF37', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:5 }}>Notes</div>
                     <div style={{ fontSize:14, lineHeight:1.6, color:'#C0AE8A' }}>{detailItem.notes}</div>
                   </div>}
+                  {detailItem.price_last_refreshed && (
+    <div style={{ background:'rgba(78,205,196,0.05)', border:'1px solid rgba(78,205,196,0.15)', borderRadius:12, padding:'16px', marginBottom:16 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <div style={{ fontSize:10, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace" }}>📈 Last Market Refresh</div>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          {detailItem.price_confidence && (
+            <Badge
+              text={detailItem.price_confidence}
+              color={detailItem.price_confidence==='high'?'#96CEB4':detailItem.price_confidence==='medium'?'#D4AF37':'#7A8B9A'}
+            />
+          )}
+          {detailItem.price_data_source && (
+            <Badge
+              text={detailItem.price_data_source}
+              color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#7A8B9A'}
+            />
+          )}
+        </div>
+      </div>
+
+      <div style={{ display:'flex', gap:12, marginBottom:12, flexWrap:'wrap' }}>
+        {detailItem.price_range && (
+          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Price Range</div>
+            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_range}</div>
+          </div>
+        )}
+        {detailItem.price_market_velocity && (
+          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Market Velocity</div>
+            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_market_velocity}</div>
+          </div>
+        )}
+        {detailItem.price_demand_level && (
+          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Demand</div>
+            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_demand_level}</div>
+          </div>
+        )}
+        {detailItem.price_sales_count && (
+          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
+            <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:3 }}>Sales Analyzed</div>
+            <div style={{ fontSize:14, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>{detailItem.price_sales_count}</div>
+          </div>
+        )}
+      </div>
+
+      {detailItem.price_quick_take && (
+        <div style={{ background:'rgba(78,205,196,0.05)', borderRadius:8, padding:'10px 12px', marginBottom:10 }}>
+          <div style={{ fontSize:9, color:'#4ECDC4', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>Market Insight</div>
+          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_quick_take}</div>
+        </div>
+      )}
+
+      {detailItem.price_reasoning && (
+        <div style={{ marginBottom:8 }}>
+          <div style={{ fontSize:9, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>AI Analysis</div>
+          <div style={{ fontSize:13, color:'#C0AE8A', lineHeight:1.6 }}>{detailItem.price_reasoning}</div>
+        </div>
+      )}
+
+      <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginTop:8 }}>
+        Last updated: {new Date(detailItem.price_last_refreshed).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+      </div>
+    </div>
+  )}
                   {gradingResult&&(
                     <div style={{ background:'rgba(199,125,255,0.05)', border:'1px solid rgba(199,125,255,0.2)', borderRadius:12, padding:'16px' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
