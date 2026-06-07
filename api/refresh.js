@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     // Mark item as refreshing
     await supabase.from('items').update({ price_refreshing: true }).eq('id', id)
 
-    // Build clean search query — player + year + grade only
+    // Build clean search query
     const gradeInfo = grading_service && grade_score ? `${grading_service} ${grade_score}` : null
     const queryParts = [player, year, gradeInfo].filter(Boolean)
     const searchQuery = queryParts.join(' ')
@@ -52,8 +52,69 @@ export default async function handler(req, res) {
     if (!runRes.ok) {
       const err = await runRes.text()
       console.error('Apify start error:', err)
+
+      // Fall back to Claude-only estimate
+      try {
+        const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': process.env.ANTHROPIC_API_KEY,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 512,
+            messages: [{
+              role: 'user',
+              content: `You are a sports memorabilia expert. Estimate the market value for:
+- Name: ${name}
+- Player: ${player || 'Unknown'}
+- Year: ${year || 'Unknown'}
+- Category: ${category || 'Unknown'}
+- Condition: ${condition || 'Unknown'}
+- Grading Service: ${grading_service || 'Ungraded'}
+- Grade Score: ${grade_score || 'N/A'}
+
+Respond ONLY with valid JSON, no markdown, no preamble:
+{
+  "marketValue": number only,
+  "reasoning": "2-3 sentence explanation",
+  "confidence": "high, medium, or low"
+}`
+            }]
+          })
+        })
+
+        if (claudeRes.ok) {
+          const claudeData = await claudeRes.json()
+          const text = claudeData.content?.map(b => b.text || '').join('') || ''
+          const clean = text.replace(/```json|```/g, '').trim()
+          const valuation = JSON.parse(clean)
+
+          await supabase.from('items').update({
+            market_value:          valuation.marketValue,
+            price_refreshing:      false,
+            price_last_refreshed:  new Date().toISOString(),
+            price_reasoning:       valuation.reasoning || null,
+            price_confidence:      valuation.confidence || null,
+            price_data_source:     'AI estimate — eBay unavailable',
+            price_range:           null,
+            price_market_velocity: null,
+            price_demand_level:    null,
+            price_sales_count:     null,
+            price_quick_take:      null,
+          }).eq('id', id)
+
+          console.log(`Fallback Claude estimate: $${valuation.marketValue}`)
+          return res.status(200).json({ success: true, message: 'AI estimate used — Apify unavailable' })
+        }
+      } catch (fallbackErr) {
+        console.error('Fallback error:', fallbackErr)
+      }
+
       await supabase.from('items').update({ price_refreshing: false }).eq('id', id)
-      return res.status(500).json({ error: 'Failed to start price refresh' })
+      return res.status(200).json({ success: true, message: 'Refresh failed — please try again' })
     }
 
     const runData = await runRes.json()
