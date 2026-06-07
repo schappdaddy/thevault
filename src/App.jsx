@@ -573,7 +573,7 @@ function Vault() {
   onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
   <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden', flexShrink:0 }}>
     {item.image_url
-      ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0 }} />
+      ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0, imageOrientation:'from-image' }} />
       : (CAT_EMOJI[item.category]||'📦')
     }
     <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
@@ -678,7 +678,7 @@ function Vault() {
                 <div>
                   <div style={{ height:280, borderRadius:14, overflow:'hidden', background:'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:72, border:'1px solid rgba(255,255,255,0.08)', position:'relative' }}>
                     {detailItem.image_url
-                      ? <img src={detailItem.image_url} alt={detailItem.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                      ? <img src={detailItem.image_url} alt={detailItem.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', imageOrientation:'from-image' }} />
                       : (CAT_EMOJI[detailItem.category]||'📦')
                     }
                   </div>
@@ -861,7 +861,7 @@ function Vault() {
                   <input ref={fileRef} type="file" accept="image/*" style={{ display:'none' }} onChange={e=>handleImageUpload(e.target.files[0])} />
                   {imagePreview?(
                     <div style={{ display:'flex', gap:16, alignItems:'flex-start', textAlign:'left' }}>
-                      <img src={imagePreview} alt="Preview" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0 }} />
+                      <img src={imagePreview} alt="Preview" style={{ width:120, height:120, objectFit:'cover', borderRadius:10, border:'1px solid rgba(212,175,55,0.3)', flexShrink:0, imageOrientation:'from-image' }} />
                       <div style={{ flex:1 }}>
                         {aiLoading?<Spinner label="Analyzing your item…" />:(
                           <>
