@@ -27,7 +27,7 @@ export default async function handler(req, res) {
     const searchQuery = queryParts.join(' ')
     const callbackUrl = `https://thevault-iota.vercel.app/api/refresh-callback`
 
-    // Step 1 — Start the Apify run (no webhook in body)
+    // Step 1 — Start the Apify run
     const runRes = await fetch(
       `https://api.apify.com/v2/acts/marielise.dev~ebay-sold-listings-intelligence/runs?token=${process.env.APIFY_API_TOKEN}`,
       {
@@ -58,8 +58,14 @@ export default async function handler(req, res) {
 
     console.log(`Apify run started: ${runId} for item: ${name}`)
 
-    // Step 2 — Register webhook for this specific run
-    const itemData = { itemId:id, itemName:name, player:player||'', year:year||'', category:category||'', condition:condition||'', grading_service:grading_service||'', grade_score:grade_score||'' }
+    // Step 2 — Register webhook using resource template
+    const safeName     = (name||'').replace(/"/g, '')
+    const safePlayer   = (player||'').replace(/"/g, '')
+    const safeYear     = (year||'').replace(/"/g, '')
+    const safeCategory = (category||'').replace(/"/g, '')
+    const safeCond     = (condition||'').replace(/"/g, '')
+    const safeGrader   = (grading_service||'').replace(/"/g, '')
+    const safeGrade    = (grade_score||'').replace(/"/g, '')
 
     const webhookRes = await fetch(
       `https://api.apify.com/v2/webhooks?token=${process.env.APIFY_API_TOKEN}`,
@@ -70,11 +76,8 @@ export default async function handler(req, res) {
           eventTypes: ['ACTOR.RUN.SUCCEEDED', 'ACTOR.RUN.FAILED'],
           condition: { actorRunId: runId },
           requestUrl: callbackUrl,
-          payloadTemplate: JSON.stringify({
-            ...itemData,
-            runId: '{{runId}}',
-            datasetId: '{{defaultDatasetId}}'
-          })
+          headersTemplate: '{"Content-Type": "application/json"}',
+          payloadTemplate: `{"itemId":"${id}","itemName":"${safeName}","player":"${safePlayer}","year":"${safeYear}","category":"${safeCategory}","condition":"${safeCond}","grading_service":"${safeGrader}","grade_score":"${safeGrade}","resource":{{resource}}}`
         })
       }
     )
