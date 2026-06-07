@@ -138,6 +138,7 @@ function Vault() {
   const [filterOptions,  setFilterOptions]  = useState({})
   const [submittedSearch, setSubmittedSearch] = useState('')
   const [searchQ,        setSearchQ]        = useState('')
+  const [lightboxItem,   setLightboxItem]   = useState(null)
 
   const [filterCat,          setFilterCat]          = useState('')
   const [filterYear,         setFilterYear]         = useState('')
@@ -295,46 +296,45 @@ function Vault() {
       })
       setImagePreview(dataUrl)
       const img = new Image()
-img.src = dataUrl
-await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
-const MAX = 1200
-const w = img.naturalWidth
-const h = img.naturalHeight
-const scale = Math.min(MAX/w, MAX/h, 1)
-const canvas = document.createElement('canvas')
-canvas.width  = Math.round(w * scale)
-canvas.height = Math.round(h * scale)
-canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
-const compressed = canvas.toDataURL('image/jpeg', 0.85)
-const base64 = compressed.split(',')[1]
+      img.src = dataUrl
+      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject; setTimeout(reject,10000) })
+      const MAX = 1200
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const scale = Math.min(MAX/w, MAX/h, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(w * scale)
+      canvas.height = Math.round(h * scale)
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+      const compressed = canvas.toDataURL('image/jpeg', 0.85)
+      const base64 = compressed.split(',')[1]
       const hintsText = aiHints.trim() ? `\n\nIMPORTANT additional context from the collector: ${aiHints.trim()}` : ''
 
-if (editingId) {
-  // Edit mode — just upload the image, don't run AI or overwrite fields
-  await uploadToR2(base64, `${Date.now()}.jpg`)
-} else {
-  const [aiResult] = await Promise.all([
-    fetch('/api/analyze', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ imageData:base64, mediaType:'image/jpeg', hints:hintsText })
-    }).then(r => r.json()),
-    uploadToR2(base64, `${Date.now()}.jpg`)
-  ])
-  if (aiResult.error) throw new Error(aiResult.error)
-  setForm(prev => ({
-    ...prev, ...aiResult,
-    market_value:    aiResult.marketValue    ?? aiResult.market_value    ?? '',
-    grading_service: aiResult.gradingService ?? aiResult.grading_service ?? '',
-    grade_score:     aiResult.gradeScore     ?? aiResult.grade_score     ?? '',
-    serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
-    purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
-    quantity: prev.quantity || 1,
-    dataSource: 'AI estimate',
-  }))
-}
+      if (editingId) {
+        await uploadToR2(base64, `${Date.now()}.jpg`)
+      } else {
+        const [aiResult] = await Promise.all([
+          fetch('/api/analyze', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ imageData:base64, mediaType:'image/jpeg', hints:hintsText })
+          }).then(r => r.json()),
+          uploadToR2(base64, `${Date.now()}.jpg`)
+        ])
+        if (aiResult.error) throw new Error(aiResult.error)
+        setForm(prev => ({
+          ...prev, ...aiResult,
+          market_value:    aiResult.marketValue    ?? aiResult.market_value    ?? '',
+          grading_service: aiResult.gradingService ?? aiResult.grading_service ?? '',
+          grade_score:     aiResult.gradeScore     ?? aiResult.grade_score     ?? '',
+          serial_number:   aiResult.serialNumber   ?? aiResult.serial_number   ?? '',
+          purchase_price:  prev.purchase_price, purchase_date: prev.purchase_date,
+          quantity: prev.quantity || 1,
+          dataSource: 'AI estimate',
+        }))
+      }
     } catch(err) { setAiError(`Analysis failed: ${err.message}`) }
     setAiLoading(false)
-  }, [aiHints])
+  }, [aiHints, editingId])
 
   const handleDrop = useCallback((e) => {
     e.preventDefault()
@@ -364,7 +364,7 @@ if (editingId) {
         purchase_price:form.purchase_price ? Number(form.purchase_price) : null,
         purchase_date:form.purchase_date||null, serial_number:form.serial_number||null,
         notes:form.notes||null, image_url, image_path, quantity:Number(form.quantity)||1,
-        price_data_source: 'AI estimate',
+        price_data_source: editingId ? (form.price_data_source || 'AI estimate') : 'AI estimate',
       }
       if (editingId) { await supabase.from('items').update(payload).eq('id',editingId) }
       else { await supabase.from('items').insert(payload) }
@@ -537,6 +537,21 @@ if (editingId) {
       </div>
     )
   }
+
+  if (lightboxItem) return (
+    <ImageLightbox
+      item={lightboxItem}
+      onClose={()=>setLightboxItem(null)}
+      onSaved={async ()=>{
+        setLightboxItem(null)
+        await refetchAll()
+        if (selected?.id === lightboxItem.id) {
+          const { data } = await supabase.from('items').select('*').eq('id', lightboxItem.id).single()
+          setSelectedFull(data || lightboxItem)
+        }
+      }}
+    />
+  )
   return (
     <div style={{ minHeight:'100vh', background:'linear-gradient(135deg,#0A0F1C 0%,#111827 50%,#0D1520 100%)', color:'#F0E6C8' }}>
       <div style={{ borderBottom:'1px solid rgba(212,175,55,0.15)', padding:'0 20px', paddingTop:'env(safe-area-inset-top)', display:'flex', alignItems:'center', justifyContent:'space-between', height:'calc(60px + env(safe-area-inset-top))', background:'rgba(0,0,0,0.4)', backdropFilter:'blur(16px)', position:'sticky', top:0, zIndex:100 }}>
@@ -575,34 +590,34 @@ if (editingId) {
               {items.map(item=>{
                 const isEbay = item.price_data_source === 'eBay sold listings'
                 return (
-                 <div key={item.id} onClick={()=>openDetail(item)}
-  style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)', display:'flex', flexDirection:'column' }}
-  onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
-  onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
-  <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden', flexShrink:0 }}>
-    {item.image_url
-      ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0, imageOrientation:'from-image' }} />
-      : (CAT_EMOJI[item.category]||'📦')
-    }
-    <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
-    {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
-    {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating…</div>}
-  </div>
-  <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', flex:1 }}>
-    <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
-    <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
-    <div style={{ marginTop:'auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-      <div>
-        <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
-        {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
-      </div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
-        {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
-        <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay?'📊 eBay':'🤖 AI'}</span>
-      </div>
-    </div>
-  </div>
-</div>
+                  <div key={item.id} onClick={()=>openDetail(item)}
+                    style={{ background:'linear-gradient(160deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14, overflow:'hidden', cursor:'pointer', transition:'all 0.3s cubic-bezier(0.4,0,0.2,1)', display:'flex', flexDirection:'column' }}
+                    onMouseEnter={e=>{ e.currentTarget.style.transform='translateY(-4px)'; e.currentTarget.style.boxShadow='0 20px 40px rgba(0,0,0,0.4)' }}
+                    onMouseLeave={e=>{ e.currentTarget.style.transform=''; e.currentTarget.style.boxShadow='' }}>
+                    <div style={{ height:160, background:'rgba(255,255,255,0.02)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:48, position:'relative', overflow:'hidden', flexShrink:0 }}>
+                      {item.image_url
+                        ? <img src={item.image_url} alt={item.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', position:'absolute', inset:0, imageOrientation:'from-image' }} />
+                        : (CAT_EMOJI[item.category]||'📦')
+                      }
+                      <div style={{ position:'absolute', top:8, right:8 }}><Badge text={item.category} color={CAT_COLOR[item.category]} /></div>
+                      {(item.quantity||1) > 1 && <div style={{ position:'absolute', top:8, left:8, background:'rgba(0,0,0,0.7)', borderRadius:6, padding:'2px 8px', fontSize:11, fontFamily:"'Space Mono',monospace", color:'#D4AF37' }}>×{item.quantity}</div>}
+                      {item.price_refreshing && <div style={{ position:'absolute', bottom:8, left:8, background:'rgba(78,205,196,0.9)', borderRadius:6, padding:'2px 8px', fontSize:10, fontFamily:"'Space Mono',monospace", color:'#0A0F1C' }}>⏳ Updating…</div>}
+                    </div>
+                    <div style={{ padding:'12px 14px', display:'flex', flexDirection:'column', flex:1 }}>
+                      <div style={{ fontFamily:"'Playfair Display',serif", fontWeight:600, fontSize:14, marginBottom:3, lineHeight:1.3 }}>{item.name}</div>
+                      <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginBottom:8 }}>{[item.player,item.year].filter(Boolean).join(' · ')}</div>
+                      <div style={{ marginTop:'auto', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div>
+                          <div style={{ fontSize:17, fontWeight:700, color:item.price_refreshing?'#4ECDC4':'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{item.price_refreshing?'⏳':fmt(item.market_value)}</div>
+                          {(item.quantity||1) > 1 && !item.price_refreshing && <div style={{ fontSize:10, color:'#7A8B9A', fontFamily:"'Space Mono',monospace" }}>×{item.quantity} = {fmt((Number(item.market_value)||0)*(item.quantity||1))}</div>}
+                        </div>
+                        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
+                          {item.grading_service&&item.grade_score&&<Badge text={`${item.grading_service} ${item.grade_score}`} color="#4ECDC4" />}
+                          <span style={{ fontSize:9, color:isEbay?'#4ECDC4':'#7A8B9A', fontFamily:"'Space Mono',monospace", letterSpacing:0.5 }}>{isEbay?'📊 eBay':'🤖 AI'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 )
               })}
               {items.length===0&&!loading&&<div style={{ gridColumn:'1/-1', textAlign:'center', padding:'60px 0', color:'#7A8B9A' }}><div style={{ fontSize:48, marginBottom:12 }}>🏟️</div><div style={{ fontFamily:"'Playfair Display',serif", fontSize:20 }}>No items found</div></div>}
@@ -684,9 +699,14 @@ if (editingId) {
             {!detailItem ? <Spinner label="Loading item…" /> : (
               <div style={{ display:'grid', gridTemplateColumns:'minmax(0,280px) 1fr', gap:24 }}>
                 <div>
-                  <div style={{ height:280, borderRadius:14, overflow:'hidden', background:'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:72, border:'1px solid rgba(255,255,255,0.08)', position:'relative' }}>
+                  <div
+                    onClick={()=>{ if(detailItem.image_url) setLightboxItem(detailItem) }}
+                    style={{ height:280, borderRadius:14, overflow:'hidden', background:'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:72, border:'1px solid rgba(255,255,255,0.08)', position:'relative', cursor:detailItem.image_url?'zoom-in':'default' }}>
                     {detailItem.image_url
-                      ? <img src={detailItem.image_url} alt={detailItem.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', imageOrientation:'from-image' }} />
+                      ? <>
+                          <img src={detailItem.image_url} alt={detailItem.name} loading="lazy" style={{ width:'100%', height:'100%', objectFit:'cover', imageOrientation:'from-image' }} />
+                          <div style={{ position:'absolute', bottom:8, right:8, background:'rgba(0,0,0,0.6)', borderRadius:6, padding:'3px 8px', fontSize:10, color:'#F0E6C8', fontFamily:"'Space Mono',monospace" }}>tap to edit</div>
+                        </>
                       : (CAT_EMOJI[detailItem.category]||'📦')
                     }
                   </div>
@@ -853,6 +873,7 @@ if (editingId) {
 
         {/* DEAL SCANNER */}
         {view==='deal' && <DealScanner />}
+
         {/* ADD / EDIT */}
         {view==='add' && (
           <div className="fade-in" style={{ maxWidth:760, margin:'0 auto' }}>
@@ -952,6 +973,112 @@ if (editingId) {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+function ImageLightbox({ item, onClose, onSaved }) {
+  const [rotation, setRotation] = useState(0)
+  const [saving,   setSaving]   = useState(false)
+
+  function rotate(deg) {
+    setRotation(r => (r + deg + 360) % 360)
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    try {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = item.image_url + '?t=' + Date.now()
+      await new Promise((resolve, reject) => { img.onload=resolve; img.onerror=reject })
+
+      const rad = (rotation * Math.PI) / 180
+      const sin = Math.abs(Math.sin(rad))
+      const cos = Math.abs(Math.cos(rad))
+      const w = img.naturalWidth
+      const h = img.naturalHeight
+      const newW = Math.round(w * cos + h * sin)
+      const newH = Math.round(w * sin + h * cos)
+
+      const MAX = 1200
+      const scale = Math.min(MAX/newW, MAX/newH, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width  = Math.round(newW * scale)
+      canvas.height = Math.round(newH * scale)
+      const ctx = canvas.getContext('2d')
+      ctx.translate(canvas.width/2, canvas.height/2)
+      ctx.rotate(rad)
+      ctx.drawImage(img, -w*scale/2, -h*scale/2, w*scale, h*scale)
+
+      const base64 = canvas.toDataURL('image/jpeg', 0.85).split(',')[1]
+      const key = item.image_path || item.image_url.split('/').pop()
+
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageData: base64,
+          filename: key,
+          contentType: 'image/jpeg',
+          overwriteKey: key,
+        })
+      })
+
+      if (!res.ok) throw new Error('Upload failed')
+      await onSaved()
+    } catch(err) {
+      alert('Save failed: ' + err.message)
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:1000, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:20 }}>
+      {/* Header */}
+      <div style={{ position:'absolute', top:0, left:0, right:0, padding:'16px 20px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'rgba(0,0,0,0.5)' }}>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:16, color:'#F0E6C8' }}>{item.name}</div>
+        <button onClick={onClose} style={{ background:'transparent', border:'none', color:'#7A8B9A', fontSize:24, cursor:'pointer', padding:'0 4px' }}>×</button>
+      </div>
+
+      {/* Image */}
+      <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', width:'100%', marginTop:60, marginBottom:120 }}>
+        <img
+          src={item.image_url}
+          alt={item.name}
+          style={{
+            maxWidth:'90%', maxHeight:'100%', objectFit:'contain',
+            transform:`rotate(${rotation}deg)`,
+            transition:'transform 0.3s ease',
+            borderRadius:8,
+          }}
+        />
+      </div>
+
+      {/* Controls */}
+      <div style={{ position:'absolute', bottom:0, left:0, right:0, padding:'20px', background:'rgba(0,0,0,0.7)', display:'flex', justifyContent:'center', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+        <button onClick={()=>rotate(-90)}
+          style={{ background:'rgba(255,255,255,0.1)', color:'#F0E6C8', border:'1px solid rgba(255,255,255,0.2)', borderRadius:10, padding:'10px 20px', fontSize:13, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          ↺ 90°
+        </button>
+        <button onClick={()=>rotate(90)}
+          style={{ background:'rgba(255,255,255,0.1)', color:'#F0E6C8', border:'1px solid rgba(255,255,255,0.2)', borderRadius:10, padding:'10px 20px', fontSize:13, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          ↻ 90°
+        </button>
+        <button onClick={()=>rotate(180)}
+          style={{ background:'rgba(255,255,255,0.1)', color:'#F0E6C8', border:'1px solid rgba(255,255,255,0.2)', borderRadius:10, padding:'10px 20px', fontSize:13, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          ↕ 180°
+        </button>
+        {rotation !== 0 && (
+          <button onClick={handleSave} disabled={saving}
+            style={{ background:'linear-gradient(135deg,#D4AF37,#A0832A)', color:'#0A0F1C', border:'none', borderRadius:10, padding:'10px 24px', fontSize:13, fontWeight:700, cursor:saving?'not-allowed':'pointer', fontFamily:"'Space Mono',monospace" }}>
+            {saving ? 'Saving…' : '💾 Save to Vault'}
+          </button>
+        )}
+        <button onClick={onClose}
+          style={{ background:'transparent', color:'#7A8B9A', border:'1px solid rgba(255,255,255,0.1)', borderRadius:10, padding:'10px 20px', fontSize:13, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          Cancel
+        </button>
       </div>
     </div>
   )
