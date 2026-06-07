@@ -23,8 +23,11 @@ export default async function handler(req, res) {
     await supabase.from('items').update({ price_refreshing: true }).eq('id', id)
 
     // Build search query
-    const queryParts = [player, year, name?.split(' ').slice(0,4).join(' ')].filter(Boolean)
-    const searchQuery = queryParts.join(' ')
+  const gradeInfo = grading_service && grade_score ? `${grading_service} ${grade_score}` : null
+const shortName = name?.split(' ').slice(0,5).join(' ')
+const queryParts = [player, year, shortName, gradeInfo].filter(Boolean)
+const searchQuery = queryParts.join(' ')
+console.log(`Search query: ${searchQuery}`)
     const callbackUrl = `https://thevault-iota.vercel.app/api/refresh-callback`
 
     // Step 1 — Start the Apify run
