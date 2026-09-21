@@ -765,7 +765,7 @@ function Vault() {
                       {refreshPolling && selected?.id===detailItem.id
                         ? <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                             <div style={{ width:20, height:20, borderRadius:'50%', border:'2px solid rgba(78,205,196,0.2)', borderTop:'2px solid #4ECDC4', animation:'spin 0.8s linear infinite' }} />
-                            <div style={{ fontSize:14, color:'#4ECDC4', fontFamily:"'Space Mono',monospace" }}>Fetching eBay price…</div>
+                            <div style={{ fontSize:14, color:'#4ECDC4', fontFamily:"'Space Mono',monospace" }}>Getting AI estimate…</div>
                           </div>
                         : <div style={{ fontSize:26, fontWeight:700, color:'#D4AF37', fontFamily:"'Playfair Display',serif" }}>{fmt(detailItem.market_value)}</div>
                       }
@@ -938,7 +938,7 @@ function Vault() {
                             {uploadStatus==='uploading'&&<div style={{ color:'#D4AF37', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>⬆️ Uploading image…</div>}
                             {uploadStatus==='done'&&<div style={{ color:'#96CEB4', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>✓ Image ready</div>}
                             {uploadStatus==='error'&&<div style={{ color:'#FF6B6B', fontSize:11, marginBottom:4, fontFamily:"'Space Mono',monospace" }}>⚠️ Image upload failed</div>}
-                            <div style={{ color:'#7A8B9A', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>🤖 AI estimate — tap Refresh Market Value for real eBay pricing</div>
+                            <div style={{ color:'#7A8B9A', fontSize:11, marginBottom:6, fontFamily:"'Space Mono',monospace" }}>🤖 AI estimate — tap Refresh Market Value to update it</div>
                             <div style={{ fontSize:12, color:'#7A8B9A', marginBottom:10 }}>Review and adjust fields below</div>
                             <button onClick={e=>{e.stopPropagation();handleClearImage()}} style={{ background:'rgba(255,107,107,0.1)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.2)', borderRadius:6, padding:'4px 12px', cursor:'pointer', fontSize:12 }}>Clear & Re-upload</button>
                           </>
