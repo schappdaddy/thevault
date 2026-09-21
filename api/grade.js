@@ -21,6 +21,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
+        temperature: 0,
         messages: [{
           role: 'user',
           content: `You are a sports memorabilia grading expert who helps collectors decide if grading is financially worthwhile. Analyze whether this item is worth submitting for professional grading.
