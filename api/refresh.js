@@ -33,6 +33,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 512,
+        temperature: 0,
         messages: [{
           role: 'user',
           content: `You are a sports memorabilia market expert. Estimate the current market value for this item based on your knowledge of comparable sales.
