@@ -500,6 +500,7 @@ function Vault() {
           team: item.team, year: item.year, category: item.category,
           manufacturer: item.manufacturer, condition: item.condition,
           grading_service: item.grading_service, grade_score: item.grade_score,
+          serial_number: item.serial_number,
         })
       })
       if (!res.ok) throw new Error('Failed to start refresh')
@@ -803,19 +804,12 @@ function Vault() {
                           )}
                           {detailItem.price_data_source && (
                             <Badge
-                              text={detailItem.price_data_source==='AI estimate — eBay unavailable'?'AI estimate':detailItem.price_data_source}
-                              color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#FF6B6B'}
+                              text={detailItem.price_data_source==='eBay sold listings'?detailItem.price_data_source:'AI estimate'}
+                              color={detailItem.price_data_source==='eBay sold listings'?'#4ECDC4':'#7A8B9A'}
                             />
                           )}
                         </div>
                       </div>
-                      {detailItem.price_data_source==='AI estimate — eBay unavailable' && (
-                        <div style={{ background:'rgba(255,107,107,0.08)', border:'1px solid rgba(255,107,107,0.25)', borderRadius:8, padding:'10px 14px', marginBottom:12 }}>
-                          <div style={{ fontSize:12, color:'#FF6B6B', fontFamily:"'Space Mono',monospace" }}>
-                            ⚠️ eBay pricing unavailable — Apify credits may be empty. Add credits at console.apify.com → Billing.
-                          </div>
-                        </div>
-                      )}
                       <div style={{ display:'flex', gap:12, marginBottom:12, flexWrap:'wrap' }}>
                         {detailItem.price_range && (
                           <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 12px', flex:1, minWidth:120 }}>
