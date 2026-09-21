@@ -108,6 +108,91 @@ export default function App() {
   if (!unlocked) return <PasswordGate onUnlock={() => setUnlocked(true)} />
   return <Vault />
 }
+function FilterPanel({
+  filterCat, setFilterCat, filterYear, setFilterYear, filterTeam, setFilterTeam,
+  filterPlayer, setFilterPlayer, filterManufacturer, setFilterManufacturer,
+  filterCondition, setFilterCondition, filterGrader, setFilterGrader,
+  filterGrade, setFilterGrade, filterPriceSource, setFilterPriceSource, filterOptions,
+}) {
+  return (
+    <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'16px', marginBottom:16 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
+        {[
+          ['Category', filterCat, setFilterCat, filterOptions.categories],
+          ['Year', filterYear, setFilterYear, filterOptions.years],
+          ['Team', filterTeam, setFilterTeam, filterOptions.teams],
+          ['Player', filterPlayer, setFilterPlayer, filterOptions.players],
+          ['Manufacturer', filterManufacturer, setFilterManufacturer, filterOptions.manufacturers],
+          ['Condition', filterCondition, setFilterCondition, filterOptions.conditions],
+          ['Grader', filterGrader, setFilterGrader, filterOptions.graders],
+          ['Grade', filterGrade, setFilterGrade, filterOptions.grades],
+          ['Price Source', filterPriceSource, setFilterPriceSource, filterOptions.priceSources],
+        ].map(([label, value, setter, options]) => (
+          <div key={label}>
+            <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>{label}</div>
+            <select value={value} onChange={e=>setter(e.target.value)} style={{ ...selStyle, width:'100%' }}>
+              <option value="">All</option>
+              {options?.map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Toolbar({
+  showSort=true, searchQ, setSearchQ, submittedSearch, setSubmittedSearch,
+  showFilters, setShowFilters, activeFilterCount, clearAllFilters,
+  sortBy, setSortBy, itemsCount, totalCount, filterProps,
+}) {
+  return (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:8 }}>
+        <input
+          placeholder="Search…"
+          value={searchQ}
+          onChange={e=>setSearchQ(e.target.value)}
+          onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
+          style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }}
+        />
+        <button onClick={()=>setSubmittedSearch(searchQ)}
+          style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          Search
+        </button>
+        {submittedSearch && (
+          <button onClick={()=>{ setSearchQ(''); setSubmittedSearch('') }}
+            style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+            Clear
+          </button>
+        )}
+        <button onClick={()=>setShowFilters(f=>!f)}
+          style={{ background:showFilters||activeFilterCount>0?'rgba(212,175,55,0.15)':'transparent', color:activeFilterCount>0?'#D4AF37':'#7A8B9A', border:activeFilterCount>0?'1px solid rgba(212,175,55,0.3)':'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+          🔽 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
+        </button>
+        {activeFilterCount > 0 && (
+          <button onClick={clearAllFilters}
+            style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
+            Clear All
+          </button>
+        )}
+        {showSort && (
+          <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...selStyle, marginLeft:'auto' }}>
+            <option value="created_at">Recently Added</option>
+            <option value="market_value">Highest Value</option>
+            <option value="year">Year</option>
+            <option value="name">Name</option>
+          </select>
+        )}
+        <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginLeft:showSort?0:'auto' }}>
+          {itemsCount} of {totalCount}
+        </div>
+      </div>
+      {showFilters && <FilterPanel {...filterProps} />}
+    </div>
+  )
+}
+
 function Vault() {
   const [items,          setItems]          = useState([])
   const [loading,        setLoading]        = useState(true)
@@ -462,80 +547,16 @@ function Vault() {
   const verdictColor = v => v==='Worth Grading'?'#96CEB4':v==='Not Worth Grading'?'#FF6B6B':'#D4AF37'
   const detailItem = selectedFull || selected
 
-  function FilterPanel() {
-    return (
-      <div style={{ background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, padding:'16px', marginBottom:16 }}>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))', gap:10 }}>
-          {[
-            ['Category', filterCat, setFilterCat, filterOptions.categories],
-            ['Year', filterYear, setFilterYear, filterOptions.years],
-            ['Team', filterTeam, setFilterTeam, filterOptions.teams],
-            ['Player', filterPlayer, setFilterPlayer, filterOptions.players],
-            ['Manufacturer', filterManufacturer, setFilterManufacturer, filterOptions.manufacturers],
-            ['Condition', filterCondition, setFilterCondition, filterOptions.conditions],
-            ['Grader', filterGrader, setFilterGrader, filterOptions.graders],
-            ['Grade', filterGrade, setFilterGrade, filterOptions.grades],
-            ['Price Source', filterPriceSource, setFilterPriceSource, filterOptions.priceSources],
-          ].map(([label, value, setter, options]) => (
-            <div key={label}>
-              <div style={{ fontSize:10, color:'#7A8B9A', letterSpacing:1.5, textTransform:'uppercase', fontFamily:"'Space Mono',monospace", marginBottom:4 }}>{label}</div>
-              <select value={value} onChange={e=>setter(e.target.value)} style={{ ...selStyle, width:'100%' }}>
-                <option value="">All</option>
-                {options?.map(o=><option key={o}>{o}</option>)}
-              </select>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
+  const filterProps = {
+    filterCat, setFilterCat, filterYear, setFilterYear, filterTeam, setFilterTeam,
+    filterPlayer, setFilterPlayer, filterManufacturer, setFilterManufacturer,
+    filterCondition, setFilterCondition, filterGrader, setFilterGrader,
+    filterGrade, setFilterGrade, filterPriceSource, setFilterPriceSource, filterOptions,
   }
-
-  function Toolbar({ showSort=true }) {
-    return (
-      <div style={{ marginBottom:16 }}>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:8 }}>
-          <input
-            placeholder="Search…"
-            value={searchQ}
-            onChange={e=>setSearchQ(e.target.value)}
-            onKeyDown={e=>{ if(e.key==='Enter') setSubmittedSearch(searchQ) }}
-            style={{ ...inp, width:180, padding:'8px 12px', fontSize:13 }}
-          />
-          <button onClick={()=>setSubmittedSearch(searchQ)}
-            style={{ background:'rgba(212,175,55,0.15)', color:'#D4AF37', border:'1px solid rgba(212,175,55,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
-            Search
-          </button>
-          {submittedSearch && (
-            <button onClick={()=>{ setSearchQ(''); setSubmittedSearch('') }}
-              style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
-              Clear
-            </button>
-          )}
-          <button onClick={()=>setShowFilters(f=>!f)}
-            style={{ background:showFilters||activeFilterCount>0?'rgba(212,175,55,0.15)':'transparent', color:activeFilterCount>0?'#D4AF37':'#7A8B9A', border:activeFilterCount>0?'1px solid rgba(212,175,55,0.3)':'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
-            🔽 Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}
-          </button>
-          {activeFilterCount > 0 && (
-            <button onClick={clearAllFilters}
-              style={{ background:'rgba(255,107,107,0.15)', color:'#FF6B6B', border:'1px solid rgba(255,107,107,0.3)', borderRadius:8, padding:'8px 12px', fontSize:12, cursor:'pointer', fontFamily:"'Space Mono',monospace" }}>
-              Clear All
-            </button>
-          )}
-          {showSort && (
-            <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...selStyle, marginLeft:'auto' }}>
-              <option value="created_at">Recently Added</option>
-              <option value="market_value">Highest Value</option>
-              <option value="year">Year</option>
-              <option value="name">Name</option>
-            </select>
-          )}
-          <div style={{ fontSize:11, color:'#7A8B9A', fontFamily:"'Space Mono',monospace", marginLeft:showSort?0:'auto' }}>
-            {items.length} of {totalCount}
-          </div>
-        </div>
-        {showFilters && <FilterPanel />}
-      </div>
-    )
+  const toolbarProps = {
+    searchQ, setSearchQ, submittedSearch, setSubmittedSearch,
+    showFilters, setShowFilters, activeFilterCount, clearAllFilters,
+    sortBy, setSortBy, itemsCount: items.length, totalCount, filterProps,
   }
 
   if (lightboxItem) return (
@@ -588,7 +609,7 @@ function Vault() {
         {/* GALLERY */}
         {!loading && view==='gallery' && (
           <div className="fade-in">
-            <Toolbar showSort={true} />
+            <Toolbar showSort={true} {...toolbarProps} />
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))', gap:16 }}>
               {items.map(item=>{
                 const isEbay = item.price_data_source === 'eBay sold listings'
@@ -639,7 +660,7 @@ function Vault() {
         {/* TABLE */}
         {!loading && view==='table' && (
           <div className="fade-in">
-            <Toolbar showSort={true} />
+            <Toolbar showSort={true} {...toolbarProps} />
             <div style={{ overflowX:'auto', borderRadius:12, border:'1px solid rgba(255,255,255,0.08)' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
